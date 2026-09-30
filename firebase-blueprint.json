@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role, contact, address, ward, and civic gamification metrics",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "name": { "type": "string", "description": "Full name or institution name", "maxLength": 120 },
+        "contact": { "type": "string", "description": "Phone number or email", "maxLength": 80 },
+        "role": { "type": "string", "enum": ["citizen", "worker", "admin"], "description": "Operational civic role" },
+        "userType": { "type": "string", "enum": ["Household", "Residential Society", "College/Campus", "Commercial", "Public Place"], "description": "Premises classification under SWM Rules 2026" },
+        "ward": { "type": "string", "description": "Kanpur Nagar Nigam ward name", "maxLength": 100 },
+        "address": { "type": "string", "description": "Street address and landmarks", "maxLength": 300 },
+        "lat": { "type": "number", "description": "Geographic latitude in Kanpur" },
+        "lng": { "type": "number", "description": "Geographic longitude in Kanpur" },
+        "points": { "type": "number", "description": "Civic reward points for segregation and reporting" },
+        "streakDays": { "type": "number", "description": "Consecutive days of compliance" },
+        "badges": { "type": "array", "description": "Earned civic badges" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["uid", "role", "name"]
+    },
+    "PickupRequest": {
+      "title": "PickupRequest",
+      "description": "Special 4-stream waste pickup booking request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique pickup request ID" },
+        "userId": { "type": "string", "description": "UID of the citizen who booked the pickup" },
+        "citizenName": { "type": "string", "description": "Name of citizen or society", "maxLength": 120 },
+        "stream": { "type": "string", "enum": ["Wet", "Dry", "Sanitary", "Special Care"], "description": "Segregated waste category" },
+        "subType": { "type": "string", "enum": ["Standard Segregated", "Bulky", "E-waste", "Construction debris"], "description": "Pickup classification" },
+        "quantityKg": { "type": "number", "description": "Estimated weight in kilograms" },
+        "isBulkGenerator": { "type": "boolean", "description": "Whether premises generates >=100kg/day" },
+        "preferredDate": { "type": "string", "description": "Booking scheduled date" },
+        "timeSlot": { "type": "string", "description": "Preferred time window" },
+        "ward": { "type": "string", "description": "Kanpur ward" },
+        "address": { "type": "string", "description": "Pickup location address" },
+        "lat": { "type": "number", "description": "Latitude" },
+        "lng": { "type": "number", "description": "Longitude" },
+        "status": { "type": "string", "enum": ["Requested", "Scheduled", "Assigned", "Picked Up", "Closed"], "description": "Booking lifecycle status" },
+        "assignedWorkerName": { "type": "string", "description": "Assigned collector name" },
+        "vehicleNumber": { "type": "string", "description": "Collection vehicle registration" },
+        "createdAt": { "type": "string", "description": "Booking creation timestamp" },
+        "beforePhoto": { "type": "string", "description": "Photo URL of waste before pickup" },
+        "afterPhoto": { "type": "string", "description": "Photo URL of verified pickup" }
+      },
+      "required": ["id", "stream", "subType", "quantityKg", "status", "ward"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Civic waste issue and sanitation complaint in Kanpur",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique complaint reference ID" },
+        "userId": { "type": "string", "description": "UID of reporting citizen" },
+        "title": { "type": "string", "description": "Summary title of complaint", "maxLength": 160 },
+        "category": { "type": "string", "description": "Issue category" },
+        "description": { "type": "string", "description": "Detailed description of problem", "maxLength": 1000 },
+        "ward": { "type": "string", "description": "Kanpur ward" },
+        "address": { "type": "string", "description": "Street address" },
+        "lat": { "type": "number", "description": "Latitude" },
+        "lng": { "type": "number", "description": "Longitude" },
+        "status": { "type": "string", "enum": ["Submitted", "Verified", "Assigned", "In Progress", "Resolved", "Closed", "Reopened"], "description": "SLA status" },
+        "severity": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Severity level" },
+        "createdAt": { "type": "string", "description": "Incident report timestamp" },
+        "slaHoursRemaining": { "type": "number", "description": "Remaining hours until SLA violation" },
+        "assignedWorkerId": { "type": "string", "description": "Assigned field worker ID" },
+        "assignedWorkerName": { "type": "string", "description": "Assigned field worker name" },
+        "assignedWorkerPhone": { "type": "string", "description": "Assigned field worker phone" },
+        "citizenName": { "type": "string", "description": "Reporter name" },
+        "isAnonymous": { "type": "boolean", "description": "Whether reporter hid identity" },
+        "upvotes": { "type": "number", "description": "Number of community upvotes" },
+        "beforePhoto": { "type": "string", "description": "Photo of issue" },
+        "afterPhoto": { "type": "string", "description": "Photo of cleaned area" },
+        "rating": { "type": "number", "description": "Citizen resolution star rating 1-5" },
+        "feedback": { "type": "string", "description": "Citizen feedback comment" },
+        "timeline": { "type": "array", "description": "SLA verification timeline events" }
+      },
+      "required": ["id", "category", "ward", "status", "severity"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles, roles, and gamification records for citizens, collectors, and admins"
+    },
+    "/pickups/{pickupId}": {
+      "schema": { "$ref": "#/entities/PickupRequest" },
+      "description": "Doorstep bulk and segregated waste pickup booking requests"
+    },
+    "/complaints/{complaintId}": {
+      "schema": { "$ref": "#/entities/Complaint" },
+      "description": "Municipal waste complaints and sanitation grievance records"
+    }
+  }
+}

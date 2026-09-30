@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  html, body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #F4F6F2;
+    color: #122017;
+  }
+
+  html.dark {
+    background-color: #0D1612;
+    color: #E7EFEA;
+  }
+
+  h1, h2, h3, h4, .font-display, .font-mono, code, pre, kbd, samp, input, select, textarea, button, table {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.leaflet-container, .leaflet-popup-content, .leaflet-control {
+  font-family: "Inter", sans-serif !important;
+  z-index: 10 !important;
+  background-color: #E6ECE4;
+}
+
+html.dark .leaflet-container {
+  background-color: #15231D;
+}
+
+html.dark .leaflet-tile-pane {
+  filter: brightness(0.84) contrast(1.08) saturate(0.85);
+}
+

@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMunicipalAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'deepaksachan450@gmail.com' ||
+        (request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'deepaksachan450@gmail.com')
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isSignedIn() && (
+        isMunicipalAdmin() || (request.resource.data.role != 'admin')
+      );
+      allow update: if isSignedIn() && (
+        isMunicipalAdmin() || (isOwner(userId) && request.resource.data.role != 'admin')
+      );
+      allow delete: if isMunicipalAdmin();
+    }
+
+    // Waste Pickup Bookings collection
+    match /pickups/{pickupId} {
+      allow read: if true;
+      allow create: if isSignedIn() || true;
+      allow update: if isSignedIn() || true;
+      allow delete: if isSignedIn();
+    }
+
+    // Complaints and Grievance collection
+    match /complaints/{complaintId} {
+      allow read: if true;
+      allow create: if isSignedIn() || true;
+      allow update: if isSignedIn() || true;
+      allow delete: if isSignedIn();
+    }
+  }
+}
