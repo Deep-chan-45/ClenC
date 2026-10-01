@@ -47,6 +47,8 @@ import {
   seedInitialKanpurDataIfEmpty,
   MUNICIPAL_ADMIN_EMAIL,
   getMunicipalAdminProfile,
+  getCollectorWorkerProfile,
+  COLLECTOR_DEMO_EMAIL,
   withTimeout,
 } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -74,6 +76,9 @@ export function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [legalModal, setLegalModal] = useState<'tos' | 'privacy' | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
+  const [showLoginModalForReport, setShowLoginModalForReport] = useState<boolean>(false);
+  const [authNotice, setAuthNotice] = useState<string>('');
+  const [authInitialRole, setAuthInitialRole] = useState<Role>('citizen');
 
   // Initialize Firebase connection, auth listener, and real-time Firestore sync
   useEffect(() => {
@@ -83,7 +88,20 @@ export function App() {
     // Listen to Firebase Authentication State
     const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        const isMunicipalAdmin = fbUser.email?.trim().toLowerCase() === MUNICIPAL_ADMIN_EMAIL;
+        const cleanEmail = (fbUser.email || '').trim().toLowerCase();
+        const isMunicipalAdmin = cleanEmail === MUNICIPAL_ADMIN_EMAIL;
+        const isCollectorWorker =
+          cleanEmail === COLLECTOR_DEMO_EMAIL ||
+          cleanEmail.includes('collector') ||
+          cleanEmail.includes('worker') ||
+          cleanEmail.includes('safai');
+
+        let savedCachedUser: UserProfile | null = null;
+        try {
+          const cached = localStorage.getItem('clenc_auth_user');
+          if (cached) savedCachedUser = JSON.parse(cached);
+        } catch (_) {}
+
         let resolvedUser: UserProfile;
 
         try {
@@ -100,29 +118,44 @@ export function App() {
                 address: data.address || 'Kanpur Nagar Nigam HQ, Moti Jheel Compound',
               };
               saveUserProfileToFirestore(fbUser.uid, data).catch(() => {});
+            } else if ((isCollectorWorker || savedCachedUser?.role === 'worker') && data.role !== 'worker') {
+              data = {
+                ...data,
+                role: 'worker',
+                userType: 'Public Place',
+              };
+              saveUserProfileToFirestore(fbUser.uid, data).catch(() => {});
             }
             resolvedUser = data;
           } else {
-            resolvedUser = isMunicipalAdmin
-              ? getMunicipalAdminProfile(fbUser.uid)
-              : {
-                  ...INITIAL_USER,
-                  name: fbUser.displayName || fbUser.email?.split('@')[0] || INITIAL_USER.name,
-                  contact: fbUser.email || INITIAL_USER.contact,
-                };
             if (isMunicipalAdmin) {
+              resolvedUser = getMunicipalAdminProfile(fbUser.uid);
               saveUserProfileToFirestore(fbUser.uid, resolvedUser).catch(() => {});
-            }
-          }
-        } catch (e) {
-          console.warn('Note reading profile in onAuthStateChanged:', e);
-          resolvedUser = isMunicipalAdmin
-            ? getMunicipalAdminProfile(fbUser.uid)
-            : {
+            } else if (isCollectorWorker || savedCachedUser?.role === 'worker') {
+              resolvedUser = getCollectorWorkerProfile(fbUser.uid);
+              resolvedUser.contact = fbUser.email || resolvedUser.contact;
+              saveUserProfileToFirestore(fbUser.uid, resolvedUser).catch(() => {});
+            } else {
+              resolvedUser = {
                 ...INITIAL_USER,
                 name: fbUser.displayName || fbUser.email?.split('@')[0] || INITIAL_USER.name,
                 contact: fbUser.email || INITIAL_USER.contact,
               };
+            }
+          }
+        } catch (e) {
+          console.warn('Note reading profile in onAuthStateChanged:', e);
+          if (isMunicipalAdmin) {
+            resolvedUser = getMunicipalAdminProfile(fbUser.uid);
+          } else if (isCollectorWorker || savedCachedUser?.role === 'worker') {
+            resolvedUser = getCollectorWorkerProfile(fbUser.uid);
+          } else {
+            resolvedUser = {
+              ...INITIAL_USER,
+              name: fbUser.displayName || fbUser.email?.split('@')[0] || INITIAL_USER.name,
+              contact: fbUser.email || INITIAL_USER.contact,
+            };
+          }
         }
 
         setUser(resolvedUser);
@@ -131,9 +164,14 @@ export function App() {
           localStorage.setItem('clenc_auth_user', JSON.stringify(resolvedUser));
         } catch (_) {}
 
-        // If the user was on the auth page waiting for sign in, immediately route them to their console
+        // If the user was on the auth page waiting for sign in, immediately route them to their console or pending target
         setCurrentPage((prevPage) => {
           if (prevPage === 'auth') {
+            const pending = sessionStorage.getItem('clenc_pending_page');
+            if (pending) {
+              sessionStorage.removeItem('clenc_pending_page');
+              return pending as PageView;
+            }
             if (resolvedUser.role === 'admin') return 'admin-dashboard';
             if (resolvedUser.role === 'worker') return 'worker-dashboard';
             return 'citizen-dashboard';
@@ -198,14 +236,33 @@ export function App() {
   };
 
   const handleNavigate = (page: PageView) => {
+    // Intercept: Ask for login before reporting if not authenticated
+    if (page === 'report-issue' && !authUser) {
+      sessionStorage.setItem('clenc_pending_page', 'report-issue');
+      setAuthNotice(
+        'Citizen Login Required: Please sign in or register before reporting a waste issue so your report can be saved to the municipal database.'
+      );
+      setAuthInitialRole('citizen');
+      setShowLoginModalForReport(true);
+      return;
+    }
+
     // Route guard: Only Municipal Admins can access admin-dashboard
     if (page === 'admin-dashboard' && user.role !== 'admin') {
       showToast('Access Denied: Only Municipal Admins (deepaksachan450@gmail.com) can access the Admin Console.');
       return;
     }
+
     // Route guard: Only Safai Mitra (Workers) and Municipal Admins can access worker-dashboard
     if (page === 'worker-dashboard' && user.role !== 'worker' && user.role !== 'admin') {
-      showToast('Access Denied: Collector Console is restricted to Safai Mitra personnel.');
+      sessionStorage.setItem('clenc_pending_page', 'worker-dashboard');
+      setAuthNotice(
+        'Safai Mitra / Collector Login Required: Please sign in with your collector credentials to access your daily beat task panel.'
+      );
+      setAuthInitialRole('worker');
+      showToast('Safai Mitra / Collector Login Required to open the Worker Task Panel.');
+      setCurrentPage('auth');
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
       return;
     }
 
@@ -283,22 +340,33 @@ export function App() {
     showToast('Signed out successfully. Switched to public guest mode.');
   };
 
-  const handleSubmitComplaint = (newCmp: Complaint) => {
+  const handleSubmitComplaint = async (newCmp: Complaint) => {
+    // 1. Optimistic state update
     setComplaints((prev) => [newCmp, ...prev]);
     setSelectedComplaintId(newCmp.id);
-    const newPoints = user.points + 30;
-    setUser((prev) => ({ ...prev, points: newPoints }));
+    const newPoints = (user.points || 0) + 30;
+    const updatedUser = { ...user, points: newPoints };
+    setUser(updatedUser);
+    if (authUser) {
+      setAuthUser(updatedUser);
+      try {
+        localStorage.setItem('clenc_auth_user', JSON.stringify(updatedUser));
+      } catch (_) {}
+    }
 
-    // Persist to Firebase Firestore
-    saveComplaintToFirestore(newCmp, auth.currentUser?.uid).catch((err) => {
+    // 2. Persist to Firebase Firestore collection 'complaints'
+    const targetUid = auth.currentUser?.uid || ('uid' in user ? (user as unknown as { uid: string }).uid : '') || 'citizen_' + Date.now();
+    try {
+      await saveComplaintToFirestore(newCmp, targetUid);
+      showToast(`Grievance ${newCmp.id} stored in Municipal Database (Firestore) · +30 Points`);
+    } catch (err) {
       console.warn('Complaint firestore write note:', err);
-    });
+      showToast(`Grievance ${newCmp.id} registered locally (+30 Points). Syncing with cloud database.`);
+    }
 
     if (auth.currentUser) {
       saveUserProfileToFirestore(auth.currentUser.uid, { points: newPoints }).catch(() => {});
     }
-
-    showToast(`Complaint submitted (${newCmp.id}) · Synced with Firebase (+30 Points)`);
   };
 
   const handleUpvoteComplaint = (id: string) => {
@@ -587,8 +655,18 @@ export function App() {
         {currentPage === 'auth' && (
           <AuthPage
             user={user}
-            onLoginSuccess={handleRoleRedirect}
+            onLoginSuccess={(role, updatedProfile) => {
+              handleRoleRedirect(role, updatedProfile);
+              const pending = sessionStorage.getItem('clenc_pending_page');
+              if (pending) {
+                sessionStorage.removeItem('clenc_pending_page');
+                handleNavigate(pending as PageView);
+              }
+            }}
             onOpenLegal={(type) => setLegalModal(type)}
+            initialNotice={authNotice}
+            initialRole={authInitialRole}
+            initialMode={authNotice ? 'login' : 'register'}
           />
         )}
 
@@ -611,6 +689,35 @@ export function App() {
             onSubmitComplaint={handleSubmitComplaint}
             onUpvoteComplaint={handleUpvoteComplaint}
             onSelectComplaintToTrack={(id) => setSelectedComplaintId(id)}
+            isLoggedIn={Boolean(authUser)}
+            onRequireLogin={() => {
+              sessionStorage.setItem('clenc_pending_page', 'report-issue');
+              setAuthNotice(
+                'Citizen Login Required: Please sign in or register before reporting a waste issue so your report can be saved to the municipal database.'
+              );
+              setAuthInitialRole('citizen');
+              handleNavigate('auth');
+            }}
+            onQuickCitizenLogin={() => {
+              handleRoleRedirect('citizen', {
+                name: 'Aarav Deshmukh',
+                contact: '+91 94150 12844',
+                role: 'citizen',
+                ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+                address: '48, Model Town, Motijheel, Kanpur',
+              });
+              handleNavigate('report-issue');
+            }}
+            onQuickCollectorLogin={() => {
+              handleRoleRedirect('worker', {
+                name: 'Rameshwar Pal',
+                contact: '+91 94150 11801',
+                role: 'worker',
+                ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+                address: 'Zonal Sanitation Depot 14, Swaroop Nagar, Kanpur',
+              });
+              handleNavigate('worker-dashboard');
+            }}
           />
         )}
 
@@ -655,23 +762,46 @@ export function App() {
               onSignOut={handleSignOut}
             />
           ) : (
-            <div className="max-w-xl mx-auto my-12 p-8 border border-[#B86B11] bg-[#FDF9F2] dark:bg-[#1C160E] rounded-sm text-center space-y-4">
-              <div className="w-12 h-12 mx-auto rounded-full bg-[#B86B11]/10 border border-[#B86B11] flex items-center justify-center text-[#B86B11] text-xl font-bold font-mono">
-                !
+            <div className="max-w-xl mx-auto my-12 p-8 border border-[#0F626A] bg-[#DFEFF1] dark:bg-[#112327] rounded-sm text-center space-y-4">
+              <div className="w-12 h-12 mx-auto rounded-full bg-[#0F626A]/10 border border-[#0F626A] flex items-center justify-center text-[#0F626A] text-xl font-bold font-mono">
+                🧹
               </div>
               <h2 className="font-display text-xl font-bold text-[#122017] dark:text-[#F4F6F2]">
-                Access Restricted: Safai Mitra / Collector Only
+                Safai Mitra / Collector Login Required
               </h2>
-              <p className="text-xs text-[#4A5D52] dark:text-[#A8BEB1] leading-relaxed">
-                The Field Collector Console is reserved for municipal sanitation personnel (Safai Mitra).
+              <p className="text-xs text-[#2A464B] dark:text-[#A8CED4] leading-relaxed">
+                The Field Collector Console is reserved for municipal sanitation personnel (Safai Mitra). Sign in with your collector account to access your assigned daily beat task panel.
               </p>
-              <div className="pt-2 flex justify-center gap-2">
+              <div className="pt-2 flex flex-col sm:flex-row justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleNavigate('citizen-dashboard')}
-                  className="px-4 py-2 bg-[#15693F] text-white text-xs font-semibold rounded-sm hover:bg-[#105331]"
+                  onClick={() => {
+                    handleRoleRedirect('worker', {
+                      name: 'Rameshwar Pal',
+                      role: 'worker',
+                      contact: '+91 94150 11801',
+                      ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+                      address: 'Zonal Sanitation Depot 14, Swaroop Nagar, Kanpur',
+                    });
+                    handleNavigate('worker-dashboard');
+                  }}
+                  className="px-4 py-2.5 bg-[#0F626A] text-white text-xs font-semibold rounded-sm hover:bg-[#0B4B52] transition-colors cursor-pointer"
                 >
-                  Return to Citizen Hub
+                  ⚡ One-Click Login as Safai Mitra (Rameshwar Pal)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthNotice(
+                      'Safai Mitra Login: Please sign in with your collector credentials to access your daily beat task panel.'
+                    );
+                    setAuthInitialRole('worker');
+                    sessionStorage.setItem('clenc_pending_page', 'worker-dashboard');
+                    handleNavigate('auth');
+                  }}
+                  className="px-4 py-2.5 border border-[#0F626A] text-[#0F626A] dark:text-[#66C7D0] bg-white dark:bg-[#0E1B1D] text-xs font-semibold rounded-sm hover:bg-[#0F626A]/10 transition-colors cursor-pointer"
+                >
+                  Sign In with Collector Account
                 </button>
               </div>
             </div>
@@ -726,6 +856,91 @@ export function App() {
 
       {/* Legal Modals (Terms of Service & Privacy Policy) */}
       <LegalModal openType={legalModal} onClose={() => setLegalModal(null)} />
+
+      {/* Login Required Modal Before Reporting */}
+      {showLoginModalForReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#F4F6F2] dark:bg-[#13201A] border-2 border-[#15693F] rounded-sm p-6 sm:p-7 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#C5D0C8] dark:border-[#24382E] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#15693F] animate-pulse"></span>
+                <span className="text-xs font-mono font-bold text-[#15693F] dark:text-[#68C88E]">
+                  KANPUR NAGAR NIGAM · GRIEVANCE DESK
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLoginModalForReport(false)}
+                className="text-sm font-mono text-[#54685C] hover:text-[#122017] dark:hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="font-display text-xl font-bold text-[#122017] dark:text-[#E7EFEA]">
+                Sign In Required Before Reporting
+              </h2>
+              <p className="text-xs text-[#35483D] dark:text-[#A8BEB1] leading-relaxed">
+                Under SWM Rules 2026, waste grievances require user authentication to record authentic GPS coordinates, assign a beat collector, and save your report directly into the municipal cloud database.
+              </p>
+            </div>
+
+            <div className="p-3 bg-[#E0EFE5] dark:bg-[#122A1E] border border-[#23824E] rounded-sm text-xs font-mono text-[#1E432E] dark:text-[#A5E2BE] space-y-1">
+              <div>✓ Instant sync with Firestore collection: <strong>complaints</strong></div>
+              <div>✓ Earn +30 Civic Points on report submission</div>
+              <div>✓ 24-hour SLA tracking with Ward Safai Mitra assignment</div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginModalForReport(false);
+                  sessionStorage.setItem('clenc_pending_page', 'report-issue');
+                  setAuthNotice(
+                    'Citizen Login Required: Please sign in or register before reporting a waste issue so your report can be saved to the municipal database.'
+                  );
+                  setAuthInitialRole('citizen');
+                  setCurrentPage('auth');
+                }}
+                className="w-full h-11 px-4 text-xs font-bold text-white bg-[#15693F] hover:bg-[#105331] rounded-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <span>🔑</span>
+                <span>Sign In or Register with ClenC Account</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginModalForReport(false);
+                  handleRoleRedirect('citizen', {
+                    name: 'Aarav Deshmukh',
+                    contact: '+91 94150 12844',
+                    role: 'citizen',
+                    ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+                    address: '48, Model Town, Motijheel, Kanpur',
+                  });
+                  handleNavigate('report-issue');
+                }}
+                className="w-full h-10 px-3 text-xs font-semibold border border-[#15693F] bg-[#EAEFE7] dark:bg-[#182C22] hover:bg-[#D5E6DC] text-[#15693F] dark:text-[#68C88E] rounded-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>⚡ Instant Demo Citizen Login (Aarav Deshmukh)</span>
+              </button>
+            </div>
+
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setShowLoginModalForReport(false)}
+                className="text-xs font-mono text-[#54685C] dark:text-[#88A393] hover:underline cursor-pointer"
+              >
+                Cancel and return
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

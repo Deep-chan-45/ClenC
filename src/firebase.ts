@@ -170,6 +170,8 @@ export interface StoredUserData extends UserProfile {
 
 export const MUNICIPAL_ADMIN_EMAIL = 'deepaksachan450@gmail.com';
 export const MUNICIPAL_ADMIN_DEFAULT_PASSWORD = '123456';
+export const COLLECTOR_DEMO_EMAIL = 'collector.ward14@kanpur.clenc.in';
+export const COLLECTOR_DEMO_PASSWORD = 'Kanpur@Clean2026';
 
 export function getMunicipalAdminProfile(uid: string = 'admin_deepaksachan450'): StoredUserData {
   return {
@@ -190,6 +192,31 @@ export function getMunicipalAdminProfile(uid: string = 'admin_deepaksachan450'):
       'Verified Municipal Admin',
       'Kanpur Swachh Authority',
       'SLA Enforcement Lead',
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function getCollectorWorkerProfile(uid: string = 'worker_rameshwar_pal'): StoredUserData {
+  return {
+    uid,
+    email: COLLECTOR_DEMO_EMAIL,
+    name: 'Rameshwar Pal',
+    contact: '+91 94150 11801',
+    role: 'worker',
+    userType: 'Public Place',
+    ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+    address: 'Zonal Sanitation Depot 14, Swaroop Nagar, Kanpur',
+    lat: 26.4784,
+    lng: 80.3238,
+    points: 480,
+    streakDays: 45,
+    badges: [
+      'Lead Safai Mitra',
+      'Verified Beat Collector',
+      'Zero-SLA Breach Star',
+      'Four-Stream Collection Certified',
     ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -265,9 +292,19 @@ export async function registerWithFirebase(
 /**
  * Sign In with existing email and password. Fast and resilient against network timeouts.
  */
-export async function loginWithFirebase(email: string, password: string): Promise<StoredUserData> {
+export async function loginWithFirebase(
+  email: string,
+  password: string,
+  requestedRole?: Role
+): Promise<StoredUserData> {
   const cleanEmail = email.trim().toLowerCase();
   const isMunicipalAdmin = cleanEmail === MUNICIPAL_ADMIN_EMAIL;
+  const isCollectorWorker =
+    requestedRole === 'worker' ||
+    cleanEmail === COLLECTOR_DEMO_EMAIL ||
+    cleanEmail.includes('collector') ||
+    cleanEmail.includes('worker') ||
+    cleanEmail.includes('safai');
 
   let uid = '';
 
@@ -276,22 +313,32 @@ export async function loginWithFirebase(email: string, password: string): Promis
     uid = cred.user.uid;
   } catch (signInErr: unknown) {
     const errorStr = signInErr instanceof Error ? signInErr.message : String(signInErr);
-    // If it's the municipal admin or user not found, auto-register or use municipal admin fallback
-    if (isMunicipalAdmin || errorStr.includes('auth/user-not-found') || errorStr.includes('auth/invalid-credential')) {
+    // If it's municipal admin, collector demo, or user not found, auto-register or use fallback
+    if (
+      isMunicipalAdmin ||
+      isCollectorWorker ||
+      errorStr.includes('auth/user-not-found') ||
+      errorStr.includes('auth/invalid-credential')
+    ) {
       try {
         const createCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         uid = createCred.user.uid;
-        updateProfile(createCred.user, { displayName: isMunicipalAdmin ? 'Deepak Sachan' : 'User' }).catch(() => {});
+        updateProfile(createCred.user, {
+          displayName: isMunicipalAdmin
+            ? 'Deepak Sachan'
+            : isCollectorWorker
+            ? 'Rameshwar Pal'
+            : 'User',
+        }).catch(() => {});
       } catch (createErr: unknown) {
         if (isMunicipalAdmin && password === MUNICIPAL_ADMIN_DEFAULT_PASSWORD) {
-          // If email/password provider is not yet enabled in Firebase Console, use persistent fallback
           uid = 'admin_deepaksachan450';
+        } else if (isCollectorWorker && (cleanEmail === COLLECTOR_DEMO_EMAIL || password === COLLECTOR_DEMO_PASSWORD)) {
+          uid = 'worker_rameshwar_pal';
         } else {
           throw signInErr;
         }
       }
-    } else if (isMunicipalAdmin && password === MUNICIPAL_ADMIN_DEFAULT_PASSWORD) {
-      uid = 'admin_deepaksachan450';
     } else {
       throw signInErr;
     }
@@ -306,12 +353,25 @@ export async function loginWithFirebase(email: string, password: string): Promis
     return adminUser;
   }
 
+  // Instant response for Collector / Safai Mitra credentials
+  if (isCollectorWorker && (cleanEmail === COLLECTOR_DEMO_EMAIL || requestedRole === 'worker')) {
+    const collectorUser = getCollectorWorkerProfile(uid || 'worker_rameshwar_pal');
+    collectorUser.email = cleanEmail;
+    if (uid && uid !== 'worker_rameshwar_pal') {
+      setDoc(doc(db, 'users', uid), collectorUser, { merge: true }).catch(() => {});
+    }
+    return collectorUser;
+  }
+
   // Fast fetch with 1000ms timeout for regular users so sign-in never hangs
   const userDocRef = doc(db, 'users', uid);
   try {
     const snapshot = await withTimeout(getDoc(userDocRef), 1000, null);
     if (snapshot && snapshot.exists()) {
       const data = snapshot.data() as StoredUserData;
+      if (isCollectorWorker && data.role !== 'worker') {
+        data.role = 'worker';
+      }
       return data;
     }
   } catch (_) {
@@ -319,20 +379,21 @@ export async function loginWithFirebase(email: string, password: string): Promis
   }
 
   // Profile data fallback
+  const fallbackRole: Role = isCollectorWorker ? 'worker' : 'citizen';
   const fallbackUser: StoredUserData = {
     uid,
     email: cleanEmail,
-    name: auth.currentUser?.displayName || cleanEmail.split('@')[0],
+    name: auth.currentUser?.displayName || (isCollectorWorker ? 'Rameshwar Pal' : cleanEmail.split('@')[0]),
     contact: email,
-    role: 'citizen',
-    userType: 'Household',
+    role: fallbackRole,
+    userType: isCollectorWorker ? 'Public Place' : 'Household',
     ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
-    address: 'Kanpur, UP',
-    lat: 26.4735,
-    lng: 80.3290,
-    points: 120,
+    address: isCollectorWorker ? 'Zonal Sanitation Depot 14, Swaroop Nagar' : 'Kanpur, UP',
+    lat: 26.4784,
+    lng: 80.3238,
+    points: isCollectorWorker ? 480 : 120,
     streakDays: 1,
-    badges: ['Pioneer Segregator'],
+    badges: isCollectorWorker ? ['Verified Beat Collector', 'Safai Mitra Star'] : ['Pioneer Segregator'],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -556,6 +617,7 @@ export async function saveComplaintToFirestore(
     await setDoc(complaintDocRef, data);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
   }
 }
 
