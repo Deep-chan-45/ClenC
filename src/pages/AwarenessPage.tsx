@@ -8,6 +8,7 @@ import {
   WASTE_ITEMS_GUIDE,
 } from '../data/mockData';
 import { CitizenSidebar } from './CitizenViews';
+import { BinClassifier } from '../components/BinClassifier';
 import {
   IconAward,
   IconCamera,
@@ -33,7 +34,6 @@ export const AwarenessPage: React.FC<AwarenessPageProps> = ({
   onAwardQuizPoints,
 }) => {
   const [selectedStreamTab, setSelectedStreamTab] = useState<WasteStream>('Wet');
-  const [whichBinQuery, setWhichBinQuery] = useState<string>('banana peel');
 
   // Quiz state
   const [quizAnswers, setQuizAnswers] = useState<Record<string, WasteStream>>({});
@@ -41,17 +41,6 @@ export const AwarenessPage: React.FC<AwarenessPageProps> = ({
 
   // Recycling center filter
   const [centerFilter, setCenterFilter] = useState<string>('All');
-
-  const matchingBinItems = WASTE_ITEMS_GUIDE.filter((item) => {
-    const q = whichBinQuery.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.hindiName.includes(q) ||
-      item.stream.toLowerCase().includes(q) ||
-      item.keywords.some((k) => k.toLowerCase().includes(q))
-    );
-  });
 
   const handleCalculateQuiz = () => {
     setQuizSubmitted(true);
@@ -94,84 +83,7 @@ export const AwarenessPage: React.FC<AwarenessPageProps> = ({
 
         {/* SECTION 1: "WHICH BIN?" INSTANT SEARCH */}
         <section>
-          <div className="p-6 border border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#15241D] rounded-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-display text-lg font-bold text-[#122017] dark:text-[#E7EFEA]">
-                  "Which Bin?" Instant Item Lookup
-                </h2>
-                <p className="text-xs text-[#485B4F] dark:text-[#98AEA0]">
-                  Type any item like "banana peel", "used battery", "milk packet", "broken glass", or "diaper"
-                </p>
-              </div>
-              <span className="text-xs font-mono text-[#15693F] dark:text-[#68C88E] font-bold">
-                SWM 2026 INDEX
-              </span>
-            </div>
-
-            <div className="relative">
-              <input
-                type="text"
-                value={whichBinQuery}
-                onChange={(e) => setWhichBinQuery(e.target.value)}
-                placeholder="Type an item (e.g., banana peel, used battery, medicine, tea leaves)..."
-                className="w-full h-11 pl-10 pr-4 text-sm bg-[#EAEFE7] dark:bg-[#101C16] border border-[#B8C7BC] dark:border-[#283E33] rounded-sm"
-              />
-              <IconSearch className="w-4 h-4 text-[#485B4F] absolute left-3.5 top-3.5" />
-            </div>
-
-            {/* Quick Item Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                'banana peel',
-                'used battery',
-                'milk packet',
-                'sanitary pad',
-                'expired medicine',
-                'broken glass',
-                'tea leaves',
-                'cardboard',
-              ].map((term) => (
-                <button
-                  key={term}
-                  type="button"
-                  onClick={() => setWhichBinQuery(term)}
-                  className={`px-2.5 py-1 text-xs font-mono border rounded-xs ${
-                    whichBinQuery.toLowerCase() === term
-                      ? 'bg-[#15693F] text-[#F4F6F2] border-[#15693F]'
-                      : 'bg-[#EAEFE7] dark:bg-[#101C16] border-[#C5D0C8] dark:border-[#283E33]'
-                  }`}
-                >
-                  {term}
-                </button>
-              ))}
-            </div>
-
-            {/* Matching Results */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {matchingBinItems.slice(0, 6).map((itm) => (
-                <div
-                  key={itm.id}
-                  className="p-3.5 border border-[#B8C7BC] dark:border-[#263C31] bg-[#EAEFE7] dark:bg-[#101C16] rounded-sm space-y-1.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
-                    <span className="font-bold text-[#122017] dark:text-[#E7EFEA]">
-                      {itm.name} ({itm.hindiName})
-                    </span>
-                    <span className="font-bold text-[#15693F] dark:text-[#68C88E]">
-                      [{itm.stream.toUpperCase()}] · {itm.binColor}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#2D3E33] dark:text-[#B8CCC0]">
-                    <strong>How to dispose:</strong> {itm.instruction}
-                  </p>
-                  <p className="text-[11px] font-mono text-[#485B4F] dark:text-[#98AEA0]">
-                    Recovery: {itm.recoveryPath}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <BinClassifier variant="full" initialQuery="banana peel" />
         </section>
 
         {/* SECTION 2: INTERACTIVE 4-STREAM SEGREGATION GUIDE */}

@@ -1,9 +1,12 @@
 {
+  "projectId": "clenc-e382f",
+  "appId": "1:46453822659:web:c1524a26d75db0d413be76",
   "apiKey": "AIzaSyAIVPwtbrWCScDEc572V-MpTAJ5hBOH_Bo",
   "authDomain": "clenc-e382f.firebaseapp.com",
-  "projectId": "clenc-e382f",
+  "firestoreDatabaseId": "ai-studio-clenc-35714478-fada-4554-9f83-43a2086a2b07",
   "storageBucket": "clenc-e382f.firebasestorage.app",
   "messagingSenderId": "46453822659",
-  "appId": "1:46453822659:web:83c1ee247d0d573913be76",
-  "measurementId": "G-396Z86FYXC"
+  "measurementId": "",
+  "oAuthClientId": "46453822659-2rvcnm1lb3e0pk74cm6md58obnsmh243.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

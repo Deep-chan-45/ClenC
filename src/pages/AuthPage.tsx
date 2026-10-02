@@ -12,6 +12,9 @@ import {
   createOrUpdateGoogleFallbackUser,
   firebaseConfig,
   MUNICIPAL_ADMIN_EMAIL,
+  MUNICIPAL_ADMIN_DEFAULT_PASSWORD,
+  getMunicipalAdminProfile,
+  getCollectorWorkerProfile,
 } from '../firebase';
 
 interface AuthPageProps {
@@ -29,13 +32,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   onOpenLegal,
   initialNotice,
   initialRole,
-  initialMode = 'register',
+  initialMode = 'login',
 }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>(initialMode);
   const [selectedRole, setSelectedRole] = useState<Role>(initialRole || user.role || 'citizen');
-  const [name, setName] = useState(user.name || '');
+  const [name, setName] = useState(user.name === 'Guest Citizen' ? '' : user.name || '');
   const [email, setEmail] = useState('');
-  const [contact, setContact] = useState(user.contact || '+91 98390 44120');
+  const [contact, setContact] = useState(user.contact && user.contact !== '+91 98390 44120' ? user.contact : '');
   const [password, setPassword] = useState('');
   const [userType, setUserType] = useState<UserType>(user.userType || 'Household');
   const [ward, setWard] = useState(user.ward || 'Ward 14 - Swaroop Nagar & Arya Nagar');
@@ -62,30 +65,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       if (timer) clearTimeout(timer);
     };
   }, [loading]);
-
-  // Listen directly to Firebase Auth state to immediately end loading and route user
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-      if (fbUser) {
-        setLoading(false);
-        const isMunicipalAdmin = fbUser.email?.trim().toLowerCase() === MUNICIPAL_ADMIN_EMAIL;
-        const role: Role = isMunicipalAdmin
-          ? 'admin'
-          : (user.role === 'admin' ? 'citizen' : (user.role || (selectedRole === 'admin' ? 'citizen' : selectedRole) || 'citizen'));
-        const displayName = isMunicipalAdmin
-          ? 'Deepak Sachan'
-          : (fbUser.displayName || fbUser.email?.split('@')[0] || user.name || 'User');
-
-        onLoginSuccess(role, {
-          name: displayName,
-          contact: fbUser.email || user.contact,
-          role,
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
@@ -131,7 +110,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     if (role === 'citizen') {
       setEmail('citizen@kanpur.clenc.in');
       setPassword('Kanpur@Clean2026');
-      setName('Aarav Deshmukh');
+      setName('Priya Sharma');
       setContact('+91 94150 12844');
       setUserType('Household');
       setWard('Ward 14 - Swaroop Nagar & Arya Nagar');
@@ -160,8 +139,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!email.trim() || !password.trim()) {
-      setErrorMsg('Please enter your email and password.');
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setErrorMsg('Please enter a valid email address (e.g. yourname@domain.com).');
+      return;
+    }
+
+    if (!password.trim()) {
+      setErrorMsg('Please enter your password.');
       return;
     }
 
@@ -179,7 +165,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     try {
       if (authMode === 'register') {
-        const storedUser = await registerWithFirebase(email.trim(), password, {
+        const storedUser = await registerWithFirebase(cleanEmail, password, {
           name: name.trim(),
           contact: contact.trim(),
           role: selectedRole,
@@ -194,8 +180,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setSuccessMsg(`Registration successful! Registered as ${storedUser.role.toUpperCase()}. Stored in Firebase.`);
         onLoginSuccess(storedUser.role, storedUser);
       } else {
-        const storedUser = await loginWithFirebase(email.trim(), password, selectedRole);
-        const cleanEmail = email.trim().toLowerCase();
+        const storedUser = await loginWithFirebase(cleanEmail, password, selectedRole);
         const isMunicipalAdmin = cleanEmail === MUNICIPAL_ADMIN_EMAIL;
         const isCollector =
           selectedRole === 'worker' ||
@@ -231,75 +216,55 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       const errorStr = err instanceof Error ? err.message : String(err);
       console.error('Firebase Auth Error:', errorStr);
 
-      // Special guarantee for Municipal Admin credentials
-      if (email.trim().toLowerCase() === 'deepaksachan450@gmail.com' && password === '123456') {
-        const adminProfile = {
-          name: name || 'Deepak Sachan',
-          contact: contact || '+91 94150 99881',
-          role: 'admin' as Role,
-          userType: 'Commercial' as UserType,
-          ward: 'Ward 07 - Civil Lines & Mall Road',
-          address: 'Kanpur Nagar Nigam HQ, Moti Jheel Compound',
-          lat,
-          lng,
-          points: 2500,
-          streakDays: 30,
-          badges: ['Municipal Zonal Commissioner', 'Verified Municipal Admin', 'Kanpur Swachh Authority'],
-        };
+      // Only allow exact pre-seeded demo credentials if offline
+      if (cleanEmail === MUNICIPAL_ADMIN_EMAIL && password === MUNICIPAL_ADMIN_DEFAULT_PASSWORD) {
+        const adminProfile = getMunicipalAdminProfile('admin_deepaksachan450');
         setSuccessMsg('Welcome, Deepak Sachan! Signed in as Municipal Admin.');
         onLoginSuccess('admin', adminProfile);
         return;
       }
 
-      // Special guarantee for Collector / Safai Mitra credentials
-      if (
-        email.trim().toLowerCase() === 'collector.ward14@kanpur.clenc.in' ||
-        selectedRole === 'worker' ||
-        email.trim().toLowerCase().includes('collector')
-      ) {
-        const workerProfile = {
-          name: name || 'Rameshwar Pal',
-          contact: contact || '+91 94150 11801',
-          role: 'worker' as Role,
-          userType: 'Public Place' as UserType,
-          ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
-          address: 'Zonal Sanitation Depot 14, Swaroop Nagar, Kanpur',
-          lat: 26.4784,
-          lng: 80.3238,
-          points: 480,
-          streakDays: 45,
-          badges: ['Lead Safai Mitra', 'Verified Beat Collector', 'Zero-SLA Breach Star'],
-        };
+      if (cleanEmail === 'collector.ward14@kanpur.clenc.in' && password === 'Kanpur@Clean2026') {
+        const workerProfile = getCollectorWorkerProfile('worker_rameshwar_pal');
         setSuccessMsg('Welcome, Rameshwar Pal! Signed in as Collector / Safai Mitra.');
         onLoginSuccess('worker', workerProfile);
         return;
       }
 
-      if (errorStr.includes('auth/email-already-in-use')) {
-        setErrorMsg('This email is already registered. Please switch to "Existing User Sign In" or use another email.');
-      } else if (errorStr.includes('auth/invalid-credential') || errorStr.includes('auth/wrong-password') || errorStr.includes('auth/user-not-found')) {
-        setErrorMsg('Invalid email or password. Please verify credentials or register as a new user.');
+      if (cleanEmail === 'citizen@kanpur.clenc.in' && password === 'Kanpur@Clean2026') {
+        const citizenProfile: UserProfile = {
+          name: 'Priya Sharma',
+          contact: cleanEmail,
+          role: 'citizen',
+          userType: 'Household',
+          ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
+          address: '48, Model Town, Motijheel, Kanpur',
+          lat: 26.4784,
+          lng: 80.3238,
+          points: 120,
+          streakDays: 5,
+          badges: ['Pioneer Segregator', 'Kanpur Swachh Citizen'],
+        };
+        setSuccessMsg('Welcome, Priya Sharma! Signed in as Citizen.');
+        onLoginSuccess('citizen', citizenProfile);
+        return;
+      }
+
+      // STRICT VALIDATION: Reject any random / unauthenticated email and password
+      if (
+        errorStr.includes('auth/invalid-credential') ||
+        errorStr.includes('auth/wrong-password') ||
+        errorStr.includes('auth/user-not-found')
+      ) {
+        setErrorMsg('Invalid email or password. Access denied: No account was found with these credentials. Random credentials cannot log in. Please use valid credentials or switch to "New User Sign Up" to register.');
+      } else if (errorStr.includes('auth/email-already-in-use')) {
+        setErrorMsg('This email is already registered. Please enter your password to sign in.');
       } else if (errorStr.includes('auth/weak-password')) {
-        setErrorMsg('Password is too weak. Please use at least 6 characters with mixed characters.');
-      } else if (errorStr.includes('auth/operation-not-allowed')) {
-        // Fallback gracefully if email/password isn't enabled in console yet
-        setErrorMsg('Email/Password provider is pending activation in your Firebase Console. Logging in with verified local profile session.');
-        const isMunicipalAdmin = email.trim().toLowerCase() === MUNICIPAL_ADMIN_EMAIL;
-        const fallbackRole: Role = isMunicipalAdmin
-          ? 'admin'
-          : (selectedRole === 'admin' ? 'citizen' : selectedRole);
-        onLoginSuccess(fallbackRole, {
-          name: name || email.split('@')[0],
-          contact,
-          role: fallbackRole,
-          userType,
-          ward,
-          address,
-          lat,
-          lng,
-        });
+        setErrorMsg('Password is too weak. Please use at least 6 characters.');
+      } else if (errorStr.includes('auth/invalid-email')) {
+        setErrorMsg('Invalid email address format. Please enter a valid email.');
       } else {
-        setErrorMsg(`Authentication notice: ${errorStr.slice(0, 140)}`);
+        setErrorMsg('Invalid credentials. Access denied. Please enter registered credentials or select a verified demo role.');
       }
     }
   };
@@ -477,37 +442,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </div>
           </div>
 
-          {/* Quick Demo Bypass Access */}
+          {/* Quick Demo Pre-fill Access */}
           <div className="pt-4 border-t border-[#BDCCC1] dark:border-[#24382E] space-y-2">
             <div className="text-xs font-mono font-semibold text-[#35483D] dark:text-[#98AEA0]">
-              QUICK LAUNCH WORKSPACES:
+              AUTO-FILL VERIFIED CREDENTIALS:
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => onLoginSuccess('citizen', { name: 'Aarav Deshmukh', role: 'citizen' })}
-                className="py-2.5 px-3 text-xs font-semibold bg-[#15693F] hover:bg-[#105331] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors"
+                onClick={() => handleFillDemoCreds('citizen')}
+                className="py-2 px-2.5 text-xs font-semibold bg-[#15693F] hover:bg-[#105331] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
               >
-                Citizen Hub
+                <span>👤</span>
+                <span>Citizen Demo</span>
               </button>
               <button
                 type="button"
-                onClick={() => onLoginSuccess('worker', { name: 'Rameshwar Pal', role: 'worker' })}
-                className="py-2.5 px-3 text-xs font-semibold bg-[#0F626A] hover:bg-[#0B4B52] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors"
+                onClick={() => handleFillDemoCreds('worker')}
+                className="py-2 px-2.5 text-xs font-semibold bg-[#0F626A] hover:bg-[#0B4B52] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
               >
-                Collector Beat
+                <span>🧹</span>
+                <span>Collector Demo</span>
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setAuthMode('login');
-                  handleFillDemoCreds('admin');
-                }}
-                className="py-2.5 px-3 text-xs font-semibold bg-[#122017] dark:bg-[#284235] hover:bg-[#0B150F] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1.5"
+                onClick={() => handleFillDemoCreds('admin')}
+                className="py-2 px-2.5 text-xs font-semibold bg-[#B86B11] hover:bg-[#97550B] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
                 title="Fill Admin Credentials (deepaksachan450@gmail.com) into Sign In form"
               >
                 <span>🔑</span>
-                <span>Admin Login (Deepak Sachan)</span>
+                <span>Admin Demo</span>
               </button>
             </div>
           </div>
@@ -710,7 +674,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Aarav Deshmukh or Ganga Heights RWA"
+                  placeholder="e.g., Priya Sharma or Ganga Heights RWA"
                   className="w-full h-10 px-3 text-sm bg-[#EAEFE7] dark:bg-[#0E1814] border border-[#B8C7BC] dark:border-[#283E33] rounded-sm focus:border-[#15693F] focus:outline-hidden"
                 />
               </div>

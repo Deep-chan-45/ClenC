@@ -172,6 +172,8 @@ export const MUNICIPAL_ADMIN_EMAIL = 'deepaksachan450@gmail.com';
 export const MUNICIPAL_ADMIN_DEFAULT_PASSWORD = '123456';
 export const COLLECTOR_DEMO_EMAIL = 'collector.ward14@kanpur.clenc.in';
 export const COLLECTOR_DEMO_PASSWORD = 'Kanpur@Clean2026';
+export const CITIZEN_DEMO_EMAIL = 'citizen@kanpur.clenc.in';
+export const CITIZEN_DEMO_PASSWORD = 'Kanpur@Clean2026';
 
 export function getMunicipalAdminProfile(uid: string = 'admin_deepaksachan450'): StoredUserData {
   return {
@@ -290,7 +292,8 @@ export async function registerWithFirebase(
 }
 
 /**
- * Sign In with existing email and password. Fast and resilient against network timeouts.
+ * Sign In with existing email and password.
+ * Strictly authenticates registered users. Random/unregistered credentials will be rejected.
  */
 export async function loginWithFirebase(
   email: string,
@@ -298,10 +301,12 @@ export async function loginWithFirebase(
   requestedRole?: Role
 ): Promise<StoredUserData> {
   const cleanEmail = email.trim().toLowerCase();
-  const isMunicipalAdmin = cleanEmail === MUNICIPAL_ADMIN_EMAIL;
+  const isMunicipalAdmin = cleanEmail === MUNICIPAL_ADMIN_EMAIL && password === MUNICIPAL_ADMIN_DEFAULT_PASSWORD;
+  const isCollectorDemo = cleanEmail === COLLECTOR_DEMO_EMAIL && password === COLLECTOR_DEMO_PASSWORD;
+  const isCitizenDemo = cleanEmail === CITIZEN_DEMO_EMAIL && password === CITIZEN_DEMO_PASSWORD;
   const isCollectorWorker =
-    requestedRole === 'worker' ||
-    cleanEmail === COLLECTOR_DEMO_EMAIL ||
+    isCollectorDemo ||
+    (cleanEmail === COLLECTOR_DEMO_EMAIL && requestedRole === 'worker') ||
     cleanEmail.includes('collector') ||
     cleanEmail.includes('worker') ||
     cleanEmail.includes('safai');
@@ -312,34 +317,31 @@ export async function loginWithFirebase(
     const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
     uid = cred.user.uid;
   } catch (signInErr: unknown) {
-    const errorStr = signInErr instanceof Error ? signInErr.message : String(signInErr);
-    // If it's municipal admin, collector demo, or user not found, auto-register or use fallback
-    if (
-      isMunicipalAdmin ||
-      isCollectorWorker ||
-      errorStr.includes('auth/user-not-found') ||
-      errorStr.includes('auth/invalid-credential')
-    ) {
+    // Only pre-seeded official demo accounts are provisioned if not in Firebase Auth yet
+    if (isMunicipalAdmin || isCollectorDemo || isCitizenDemo) {
       try {
         const createCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         uid = createCred.user.uid;
         updateProfile(createCred.user, {
           displayName: isMunicipalAdmin
             ? 'Deepak Sachan'
-            : isCollectorWorker
+            : isCollectorDemo
             ? 'Rameshwar Pal'
-            : 'User',
+            : 'Priya Sharma',
         }).catch(() => {});
       } catch (createErr: unknown) {
-        if (isMunicipalAdmin && password === MUNICIPAL_ADMIN_DEFAULT_PASSWORD) {
+        if (isMunicipalAdmin) {
           uid = 'admin_deepaksachan450';
-        } else if (isCollectorWorker && (cleanEmail === COLLECTOR_DEMO_EMAIL || password === COLLECTOR_DEMO_PASSWORD)) {
+        } else if (isCollectorDemo) {
           uid = 'worker_rameshwar_pal';
+        } else if (isCitizenDemo) {
+          uid = 'citizen_priya_sharma';
         } else {
           throw signInErr;
         }
       }
     } else {
+      // STRICT REQUIREMENT: Reject any random unauthenticated email and password
       throw signInErr;
     }
   }
@@ -354,7 +356,7 @@ export async function loginWithFirebase(
   }
 
   // Instant response for Collector / Safai Mitra credentials
-  if (isCollectorWorker && (cleanEmail === COLLECTOR_DEMO_EMAIL || requestedRole === 'worker')) {
+  if (isCollectorDemo || (cleanEmail === COLLECTOR_DEMO_EMAIL && requestedRole === 'worker')) {
     const collectorUser = getCollectorWorkerProfile(uid || 'worker_rameshwar_pal');
     collectorUser.email = cleanEmail;
     if (uid && uid !== 'worker_rameshwar_pal') {

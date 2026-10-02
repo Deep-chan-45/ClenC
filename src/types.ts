@@ -155,6 +155,22 @@ export interface WasteItemGuide {
   recoveryPath: string;
 }
 
+export interface WasteClassificationResult {
+  item: string;
+  hindiName?: string;
+  stream: WasteStream | 'C&D' | 'Special Care';
+  binColor: string;
+  dustbinColorHex: string;
+  howToDump: string;
+  whereToDump: string;
+  destination: string;
+  material?: string;
+  recyclable: boolean;
+  confidence?: string;
+  warning?: string;
+  isAiGenerated?: boolean;
+}
+
 export interface QuizQuestion {
   id: string;
   question: string;

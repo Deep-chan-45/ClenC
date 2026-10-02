@@ -50,22 +50,43 @@ export const CitizenSidebar: React.FC<CitizenSidebarProps> = ({
     { code: '02', label: 'Report Waste Issue', page: 'report-issue' },
     { code: '03', label: 'Request Pickup', page: 'pickup-request' },
     { code: '04', label: 'Track Complaints', page: 'track-complaints' },
-    { code: '05', label: 'Waste Awareness & Quiz', page: 'awareness' },
+    { code: '05', label: 'AI Bin Classifier & Awareness', page: 'awareness' },
   ];
 
   return (
     <aside className="hidden lg:flex lg:w-64 shrink-0 flex-col justify-between border-r border-[#C5D0C8] dark:border-[#22342B] bg-[#EAEFE7] dark:bg-[#111D17] p-5 min-h-[calc(100vh-4rem)]">
       <div className="space-y-6">
-        <div className="p-3.5 border border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] rounded-sm space-y-1">
-          <div className="text-[11px] font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
-            CITIZEN PROFILE · {user.userType.toUpperCase()}
-          </div>
-          <div className="font-display text-sm font-bold text-[#122017] dark:text-[#E7EFEA]">
-            {user.name}
-          </div>
-          <div className="text-xs font-mono text-[#485B4F] dark:text-[#98AEA0]">
-            {user.ward}
-          </div>
+        <div className="p-3.5 border border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] rounded-sm space-y-2">
+          {user.name === 'Guest Citizen' ? (
+            <>
+              <div className="text-[11px] font-mono font-bold text-[#B86B11] dark:text-[#F0AD5E]">
+                GUEST VISITOR MODE
+              </div>
+              <div className="text-xs text-[#35483D] dark:text-[#A8BEB1] leading-tight">
+                Sign in to view your civic score, badges, and verified complaint history.
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('auth')}
+                className="w-full mt-1 py-1.5 px-3 bg-[#15693F] hover:bg-[#105331] text-white text-xs font-semibold rounded-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>🔑</span>
+                <span>Sign In to Account</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="text-[11px] font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
+                CITIZEN PROFILE · {user.userType.toUpperCase()}
+              </div>
+              <div className="font-display text-sm font-bold text-[#122017] dark:text-[#E7EFEA]">
+                {user.name}
+              </div>
+              <div className="text-xs font-mono text-[#485B4F] dark:text-[#98AEA0]">
+                {user.ward}
+              </div>
+            </>
+          )}
         </div>
 
         <nav className="space-y-1.5" aria-label="Citizen Workspace Navigation">
@@ -91,22 +112,24 @@ export const CitizenSidebar: React.FC<CitizenSidebarProps> = ({
       </div>
 
       <div className="space-y-3">
-        <div className="p-3.5 border border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] rounded-sm space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-[#485B4F] dark:text-[#98AEA0]">CIVIC POINTS</span>
-            <span className="font-bold tabular-nums text-[#15693F] dark:text-[#68C88E]">
-              {user.points.toLocaleString('en-IN')} PTS
-            </span>
+        {user.name !== 'Guest Citizen' && (
+          <div className="p-3.5 border border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] rounded-sm space-y-2">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-[#485B4F] dark:text-[#98AEA0]">CIVIC POINTS</span>
+              <span className="font-bold tabular-nums text-[#15693F] dark:text-[#68C88E]">
+                {user.points.toLocaleString('en-IN')} PTS
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-[#485B4F] dark:text-[#98AEA0]">SEGREGATION STREAK</span>
+              <span className="font-bold tabular-nums text-[#B86B11] dark:text-[#F0AD5E]">
+                {user.streakDays} DAYS
+              </span>
+            </div>
           </div>
-          <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-[#485B4F] dark:text-[#98AEA0]">SEGREGATION STREAK</span>
-            <span className="font-bold tabular-nums text-[#B86B11] dark:text-[#F0AD5E]">
-              {user.streakDays} DAYS
-            </span>
-          </div>
-        </div>
+        )}
 
-        {onSignOut && (
+        {onSignOut && user.name !== 'Guest Citizen' && (
           <button
             type="button"
             onClick={onSignOut}
@@ -130,7 +153,134 @@ export const CitizenDashboardView: React.FC<{
   onNavigate: (page: PageView) => void;
   onSelectComplaintToTrack: (id: string) => void;
   onSignOut?: () => void;
-}> = ({ user, complaints, pickups, onNavigate, onSelectComplaintToTrack, onSignOut }) => {
+  isLoggedIn?: boolean;
+}> = ({ user, complaints, pickups, onNavigate, onSelectComplaintToTrack, onSignOut, isLoggedIn = true }) => {
+  if (!isLoggedIn || user.name === 'Guest Citizen') {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] pb-16 lg:pb-0">
+        <CitizenSidebar
+          currentPage="citizen-dashboard"
+          onNavigate={onNavigate}
+          user={user}
+          onSignOut={onSignOut}
+        />
+
+        <main className="flex-1 max-w-[1140px] mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+          {/* Guest Sign In Required Box */}
+          <div className="p-6 sm:p-8 border-2 border-[#15693F] bg-[#EAEFE7] dark:bg-[#14221C] rounded-sm space-y-5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-[#B86B11] animate-ping"></span>
+              <span className="text-xs font-mono font-bold text-[#B86B11] dark:text-[#F0AD5E]">
+                CIVIC ACCOUNT SIGN-IN REQUIRED
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#122017] dark:text-[#E7EFEA]">
+                Sign In to Access Your Citizen Dashboard
+              </h1>
+              <p className="text-xs sm:text-sm text-[#35483D] dark:text-[#A8BEB1] leading-relaxed max-w-2xl">
+                Under Kanpur Nagar Nigam Solid Waste Management By-Laws 2026, the Citizen Hub tracks individual household segregation streaks, assigns personal Swachh reward points, and displays your geotagged grievance history. Sign in with your registered account or create a new profile.
+              </p>
+            </div>
+
+            <div className="p-4 border border-[#B8C7BC] dark:border-[#284235] bg-[#F4F6F2] dark:bg-[#0E1914] rounded-sm space-y-3">
+              <div className="text-xs font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
+                WHAT YOU CAN DO WITH YOUR CITIZEN ACCOUNT:
+              </div>
+              <ul className="text-xs text-[#2D3E33] dark:text-[#B8CCC0] space-y-1.5 list-disc pl-4">
+                <li>View your daily door-to-door waste collection schedule and ward e-cart timings</li>
+                <li>Earn <strong>+30 Civic Points</strong> per verified report and track 24-hour SLA progress</li>
+                <li>Redeem points for annual municipal property tax rebates and Swachh Kanpur certificates</li>
+                <li>Book doorstep collection for 4 streams (Wet, Dry, Sanitary, and Special Care / E-Waste)</li>
+              </ul>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => onNavigate('auth')}
+                className="h-11 px-6 bg-[#15693F] hover:bg-[#105331] text-[#F4F6F2] text-xs font-bold rounded-sm whitespace-nowrap cursor-pointer transition-colors shadow-xs flex items-center justify-center gap-2"
+              >
+                <span>🔑</span>
+                <span>Sign In to ClenC Account</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('report-issue')}
+                className="h-11 px-5 border border-[#15693F] text-[#15693F] dark:text-[#68C88E] bg-white dark:bg-[#101C16] hover:bg-[#EAEFE7] text-xs font-semibold rounded-sm whitespace-nowrap cursor-pointer transition-colors"
+              >
+                File Waste Grievance as Guest
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Civic Actions Preview */}
+          <section className="space-y-3">
+            <h2 className="font-display text-base font-bold text-[#122017] dark:text-[#E7EFEA]">
+              Quick Civic Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                {
+                  title: 'Report Waste Issue',
+                  meta: 'Geo-pin + photo · 24h SLA',
+                  desc: 'Overflowing bins, roadside litter, missed collection, or burning waste.',
+                  page: 'report-issue' as PageView,
+                  icon: <IconBin className="w-5 h-5 text-[#15693F]" />,
+                },
+                {
+                  title: 'Request Pickup',
+                  meta: '4 Streams + E-waste / Bulky',
+                  desc: 'Schedule doorstep collection for Wet, Dry, Sanitary, or Special Care loads.',
+                  page: 'pickup-request' as PageView,
+                  icon: <IconTruck className="w-5 h-5 text-[#0F626A]" />,
+                },
+                {
+                  title: 'Track Complaints',
+                  meta: `${complaints.length} active & past tickets`,
+                  desc: 'Inspect vertical timelines, SLA countdowns, and before/after site photos.',
+                  page: 'track-complaints' as PageView,
+                  icon: <IconSearch className="w-5 h-5 text-[#1D5B96]" />,
+                },
+                {
+                  title: 'Learn Segregation',
+                  meta: 'SWM Rules 2026 + Quiz',
+                  desc: 'Use the "Which bin?" search, classify photos, and view nearby MRF centres.',
+                  page: 'awareness' as PageView,
+                  icon: <IconLeaf className="w-5 h-5 text-[#B86B11]" />,
+                },
+              ].map((card) => (
+                <button
+                  key={card.title}
+                  type="button"
+                  onClick={() => onNavigate(card.page)}
+                  className="p-4 border border-[#B8C7BC] dark:border-[#284235] bg-[#EAEFE7] dark:bg-[#14231C] rounded-sm text-left hover:border-[#15693F] transition-colors group cursor-pointer space-y-2 flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-xs bg-white dark:bg-[#1B2F25] border border-[#C5D0C8] dark:border-[#2C4839]">
+                      {card.icon}
+                    </span>
+                    <span className="text-[10px] font-mono text-[#43564A] dark:text-[#98AEA0]">
+                      {card.meta}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-bold text-[#122017] dark:text-[#F4F6F2] group-hover:text-[#15693F] dark:group-hover:text-[#68C88E]">
+                      {card.title}
+                    </h3>
+                    <p className="text-xs text-[#35483D] dark:text-[#A8BEB1] mt-1 leading-relaxed">
+                      {card.desc}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-[calc(100vh-4rem)] pb-16 lg:pb-0">
       <CitizenSidebar
@@ -484,78 +634,6 @@ export const ReportIssueView: React.FC<{
     categoryMatch: 'Overflowing bin',
     reason: 'Verified municipal waste site evidence.',
   });
-
-  // Gated View: Ask user to log in before reporting if not authenticated
-  if (isLoggedIn === false) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] pb-16 lg:pb-0">
-        <CitizenSidebar currentPage="report-issue" onNavigate={onNavigate} user={user} />
-        <main className="flex-1 max-w-2xl mx-auto p-4 sm:p-8 space-y-6">
-          <div className="p-6 sm:p-8 border-2 border-[#15693F] bg-[#EAEFE7] dark:bg-[#14231C] rounded-sm space-y-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[#B86B11] animate-ping"></span>
-              <span className="text-xs font-mono font-bold text-[#B86B11] dark:text-[#F0AD5E]">
-                AUTHENTICATION MANDATORY BEFORE LODGING GRIEVANCE
-              </span>
-            </div>
-
-            <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#122017] dark:text-[#E7EFEA]">
-                Sign In to File a Municipal Waste Report
-              </h1>
-              <p className="mt-2 text-xs sm:text-sm text-[#35483D] dark:text-[#A8BEB1] leading-relaxed">
-                Under Kanpur Nagar Nigam Solid Waste By-Laws 2026, waste grievances require user authentication to record valid GPS coordinates, prevent duplicate spam tickets, assign a designated Ward Safai Mitra, and store your report in the central municipal database.
-              </p>
-            </div>
-
-            <div className="p-4 border border-[#B8C7BC] dark:border-[#284235] bg-[#F4F6F2] dark:bg-[#0E1914] rounded-sm space-y-3">
-              <div className="text-xs font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
-                BENEFITS OF AUTHENTICATED REPORTING:
-              </div>
-              <ul className="text-xs text-[#2D3E33] dark:text-[#B8CCC0] space-y-1.5 list-disc pl-4">
-                <li>Instant sync and persistent storage into Kanpur Nagar Nigam Firestore database</li>
-                <li>Live SLA countdown timer (6h – 24h guaranteed field resolution)</li>
-                <li>Earn <strong>+30 Civic Points</strong> towards monthly Swachh awards and certificates</li>
-                <li>Direct SMS & in-app updates with Safai Mitra "Before/After" photo verification</li>
-              </ul>
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <button
-                type="button"
-                onClick={onRequireLogin || (() => onNavigate('auth'))}
-                className="w-full h-11 px-4 text-xs font-bold text-white bg-[#15693F] hover:bg-[#105331] rounded-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-              >
-                <span>🔑</span>
-                <span>Sign In or Register with ClenC Account</span>
-              </button>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {onQuickCitizenLogin && (
-                  <button
-                    type="button"
-                    onClick={onQuickCitizenLogin}
-                    className="h-10 px-3 text-xs font-semibold border border-[#15693F] bg-[#F4F6F2] dark:bg-[#16261E] hover:bg-[#E0EFE5] dark:hover:bg-[#1E372A] text-[#15693F] dark:text-[#68C88E] rounded-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>⚡ Instant Demo Citizen (Aarav)</span>
-                  </button>
-                )}
-                {onQuickCollectorLogin && (
-                  <button
-                    type="button"
-                    onClick={onQuickCollectorLogin}
-                    className="h-10 px-3 text-xs font-semibold border border-[#0F626A] bg-[#F4F6F2] dark:bg-[#16261E] hover:bg-[#DFEFF1] dark:hover:bg-[#162D33] text-[#0F626A] dark:text-[#66C7D0] rounded-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>🧹 Login as Safai Mitra</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   const categories: { name: ComplaintCategory; sub: string; sla: string }[] = [
     { name: 'Overflowing bin', sub: 'Public twin-bin or RWA container full', sla: '12h SLA' },
@@ -1007,6 +1085,23 @@ export const ReportIssueView: React.FC<{
             ))}
           </div>
         </div>
+
+        {/* Guest Sign-in Suggestion Banner */}
+        {user.name === 'Guest Citizen' && (
+          <div className="p-3.5 border border-[#B86B11]/50 bg-[#FFF8EE] dark:bg-[#2A1D0E] rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-[#874A08] dark:text-[#F3B872]">
+              <span>ℹ️</span>
+              <span>Reporting as Guest Citizen. <strong>Sign in</strong> with your account to earn +30 Civic Points and save this grievance to your complaint history.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('auth')}
+              className="px-3.5 py-1.5 bg-[#15693F] hover:bg-[#105331] text-white text-xs font-semibold rounded-xs whitespace-nowrap self-start sm:self-auto cursor-pointer"
+            >
+              🔑 Sign In
+            </button>
+          </div>
+        )}
 
         {/* STEP 1: CHOOSE CATEGORY */}
         {step === 1 && (

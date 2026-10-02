@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Language, PageView, Role } from '../types';
 import { SWM_2026_STREAMS, TRANSLATIONS, WASTE_ITEMS_GUIDE } from '../data/mockData';
 import { ClenCLogo } from '../components/ClenCLogo';
+import { BinClassifier } from '../components/BinClassifier';
 import {
   IconBin,
   IconTruck,
@@ -32,14 +33,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   pickupsCount,
 }) => {
   const t = TRANSLATIONS[language];
-  const [quickQuery, setQuickQuery] = useState('banana peel');
-
-  const matchedItem =
-    WASTE_ITEMS_GUIDE.find(
-      (item) =>
-        item.name.toLowerCase().includes(quickQuery.toLowerCase()) ||
-        item.keywords.some((k) => k.toLowerCase().includes(quickQuery.toLowerCase()))
-    ) || WASTE_ITEMS_GUIDE[0];
 
   const getStreamIcon = (stream: string) => {
     switch (stream) {
@@ -105,6 +98,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 >
                   {language === 'en' ? 'Track Complaints' : 'शिकायत ट्रैक करें'}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('auth')}
+                  className="h-12 px-5 border-2 border-[#15693F] bg-white dark:bg-[#122A1E] text-[#15693F] dark:text-[#6EE7A2] hover:bg-[#E0EFE5] dark:hover:bg-[#1A3828] font-semibold text-sm rounded-sm whitespace-nowrap inline-flex items-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <span>🔑</span>
+                  <span>{language === 'en' ? 'Sign In / Register' : 'लॉगिन / पंजीकरण'}</span>
+                </button>
               </div>
 
               {/* Instant Role Switcher Bar for Evaluators */}
@@ -140,74 +142,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Right 5 columns: Interactive Product Demo & Live Ward Ledger */}
-            <div className="lg:col-span-5 border border-[#C2CEC5] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#15241D] rounded-sm p-5 space-y-5">
-              <div className="flex items-center justify-between border-b border-[#CDD7CF] dark:border-[#24382E] pb-3">
-                <div>
-                  <h2 className="font-display text-base font-bold text-[#122017] dark:text-[#E7EFEA]">
-                    Interactive SWM 2026 Bin Classifier & Live Feed
-                  </h2>
-                  <p className="text-xs text-[#485B4F] dark:text-[#98AEA0]">
-                    Test item sorting or inspect verified ward cleanup tickets
-                  </p>
-                </div>
-                <span className="text-xs font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
-                  LIVE · WARD 12
-                </span>
-              </div>
-
-              {/* Instant "Which bin?" demo right on the landing hero */}
-              <div className="space-y-2.5">
-                <label
-                  htmlFor="hero-bin-search"
-                  className="block text-xs font-mono font-semibold text-[#2A3B30] dark:text-[#B4C7BC]"
-                >
-                  QUICK "WHICH BIN?" CHECKER (TRY: BANANA PEEL, USED BATTERY, MILK PACKET)
-                </label>
-                <div className="relative">
-                  <input
-                    id="hero-bin-search"
-                    type="text"
-                    value={quickQuery}
-                    onChange={(e) => setQuickQuery(e.target.value)}
-                    placeholder="Type any waste item..."
-                    className="w-full h-10 pl-9 pr-3 text-sm bg-[#EAEFE7] dark:bg-[#0F1B15] border border-[#B8C7BC] dark:border-[#2A4236] rounded-sm text-[#122017] dark:text-[#E7EFEA]"
-                  />
-                  <IconSearch className="w-4 h-4 text-[#485B4F] absolute left-3 top-3" />
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {['banana peel', 'used battery', 'milk packet', 'sanitary pad', 'broken glass'].map(
-                    (sample) => (
-                      <button
-                        key={sample}
-                        type="button"
-                        onClick={() => setQuickQuery(sample)}
-                        className="px-2.5 py-1 text-xs font-mono border border-[#C2CEC5] dark:border-[#294034] bg-[#EAEFE7] dark:bg-[#101C16] text-[#2A3B30] dark:text-[#B8CCC0] rounded-xs"
-                      >
-                        {sample}
-                      </button>
-                    )
-                  )}
-                </div>
-
-                <div className="p-3.5 border border-[#B8C7BC] dark:border-[#294034] bg-[#EAEFE7] dark:bg-[#101D17] rounded-sm space-y-1">
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="font-bold text-[#122017] dark:text-[#E7EFEA]">
-                      {matchedItem.name}
-                    </span>
-                    <span className="font-semibold text-[#15693F] dark:text-[#68C88E]">
-                      Stream: {matchedItem.stream} · {matchedItem.binColor}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#34463B] dark:text-[#A8BEB1]">
-                    {matchedItem.instruction}
-                  </p>
-                </div>
-              </div>
+            {/* Right 5 columns: Interactive AI Bin Classifier & Live Ward Feed */}
+            <div className="lg:col-span-5 space-y-4">
+              <BinClassifier variant="compact" initialQuery="banana peel" />
 
               {/* Recent Verified Ward Ticket */}
-              <div className="pt-2 border-t border-[#CDD7CF] dark:border-[#24382E] space-y-2">
+              <div className="border border-[#C2CEC5] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#15241D] rounded-sm p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs font-mono text-[#485B4F] dark:text-[#98AEA0]">
                   <span>RECENT VERIFIED CLEANUP · CMP-2026-8395</span>
                   <span className="text-[#15693F] dark:text-[#68C88E] font-semibold">
@@ -217,18 +157,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="text-xs text-[#1F3025] dark:text-[#CFE0D6] font-medium">
                   HBTU East Campus Lane, Ward 14 · Collector Sunita Devi cleared 42 kg dry cartons and installed twin wet/dry bins.
                 </div>
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between pt-1 border-t border-[#CDD7CF] dark:border-[#24382E]">
                   <button
                     type="button"
                     onClick={() => onNavigate('awareness')}
-                    className="text-xs font-semibold text-[#0F626A] dark:text-[#66C7D0] underline"
+                    className="text-xs font-semibold text-[#0F626A] dark:text-[#66C7D0] underline cursor-pointer"
                   >
-                    Open Full Segregation Guide & Quiz
+                    Open Full Segregation Guide &amp; Quiz
                   </button>
                   <button
                     type="button"
                     onClick={() => onNavigate('track-complaints')}
-                    className="text-xs font-semibold text-[#15693F] dark:text-[#68C88E] underline"
+                    className="text-xs font-semibold text-[#15693F] dark:text-[#68C88E] underline cursor-pointer"
                   >
                     Inspect Before/After Evidence
                   </button>
