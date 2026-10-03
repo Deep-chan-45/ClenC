@@ -32,6 +32,7 @@ import { LeafletMap } from '../components/LeafletMap';
 import { SkeletonLoaderRows, StatusLabel } from '../components/NavbarAndModals';
 import { Leaderboard } from '../components/Leaderboard';
 import { validateWasteReportPhoto } from '../services/aiWasteService';
+import { inspectImagePixels, CivicVisionScanResult } from '../services/imageWasteAnalyzer';
 
 interface CitizenSidebarProps {
   currentPage: PageView;
@@ -539,7 +540,9 @@ export const ReportIssueView: React.FC<{
   const nearbyMatch = findNearbyDuplicate();
 
   // Downscale and compress image to max 800px JPEG so it safely fits Firestore's 1MB limit
-  const compressImageToDataUri = (file: File): Promise<{ dataUri: string; isDummySolidColor: boolean }> => {
+  const compressImageToDataUri = (
+    file: File
+  ): Promise<{ dataUri: string; isDummySolidColor: boolean; visionResult?: CivicVisionScanResult }> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -571,41 +574,18 @@ export const ReportIssueView: React.FC<{
           ctx.drawImage(img, 0, 0, width, height);
           const compressed = canvas.toDataURL('image/jpeg', 0.72);
 
-          // Fast client-side pixel entropy check for solid/blank dummy images
+          // Real Computer Vision Pixel Analysis: checks for selfies, clean rooms, documents, and real waste
           let isDummySolidColor = false;
+          let visionResult: CivicVisionScanResult | undefined;
           try {
             const imgData = ctx.getImageData(0, 0, width, height);
-            const pixels = imgData.data;
-            let sumR = 0, sumG = 0, sumB = 0;
-            const sampleCount = Math.min(600, Math.floor(pixels.length / 4));
-            const step = Math.max(1, Math.floor(pixels.length / 4 / sampleCount));
-
-            for (let i = 0; i < sampleCount; i++) {
-              const idx = i * step * 4;
-              sumR += pixels[idx];
-              sumG += pixels[idx + 1];
-              sumB += pixels[idx + 2];
-            }
-            const meanR = sumR / sampleCount;
-            const meanG = sumG / sampleCount;
-            const meanB = sumB / sampleCount;
-
-            let variance = 0;
-            for (let i = 0; i < sampleCount; i++) {
-              const idx = i * step * 4;
-              const diffR = pixels[idx] - meanR;
-              const diffG = pixels[idx + 1] - meanG;
-              const diffB = pixels[idx + 2] - meanB;
-              variance += (diffR * diffR + diffG * diffG + diffB * diffB) / 3;
-            }
-            variance = variance / sampleCount;
-            // If color variance across the entire image is less than 10, it's a solid/blank dummy canvas
-            if (variance < 10) {
+            visionResult = inspectImagePixels(imgData, file.name);
+            if (visionResult.detectedContent.includes('Blank / Solid')) {
               isDummySolidColor = true;
             }
           } catch (_) {}
 
-          resolve({ dataUri: compressed, isDummySolidColor });
+          resolve({ dataUri: compressed, isDummySolidColor, visionResult });
         };
         img.onerror = () => {
           resolve({ dataUri: (e.target?.result as string) || '', isDummySolidColor: false });
@@ -634,7 +614,7 @@ export const ReportIssueView: React.FC<{
     });
 
     try {
-      const { dataUri, isDummySolidColor } = await compressImageToDataUri(file);
+      const { dataUri, isDummySolidColor, visionResult } = await compressImageToDataUri(file);
       if (dataUri) {
         setPhotoUri(dataUri);
 
@@ -651,9 +631,9 @@ export const ReportIssueView: React.FC<{
           return;
         }
 
-        // Call AI waste verification service (Vercel Serverless / Gemini Vision / Municipal Fallback)
+        // Call AI waste verification service (Gemini Vision / Real Computer Vision Analysis)
         try {
-          const result = await validateWasteReportPhoto(dataUri, file.name);
+          const result = await validateWasteReportPhoto(dataUri, file.name, visionResult);
           if (result.isValidWaste) {
             setWasteValidation({
               status: 'valid',
@@ -684,13 +664,24 @@ export const ReportIssueView: React.FC<{
           }
         } catch (apiErr) {
           console.warn('AI validation note:', apiErr);
-          setWasteValidation({
-            status: 'valid',
-            isValidWaste: true,
-            detectedContent: 'Civic Site Evidence Verified',
-            confidence: 90,
-            reason: 'Visual evidence logged and ready for municipal review.',
-          });
+          if (visionResult) {
+            setWasteValidation({
+              status: visionResult.isValidWaste ? 'valid' : 'invalid',
+              isValidWaste: visionResult.isValidWaste,
+              detectedContent: visionResult.detectedContent,
+              confidence: visionResult.confidence,
+              categoryMatch: visionResult.categoryMatch as ComplaintCategory,
+              reason: visionResult.reason,
+            });
+          } else {
+            setWasteValidation({
+              status: 'valid',
+              isValidWaste: true,
+              detectedContent: 'Civic Site Evidence Verified',
+              confidence: 90,
+              reason: 'Visual evidence logged and ready for municipal review.',
+            });
+          }
         }
       }
     } catch (_) {

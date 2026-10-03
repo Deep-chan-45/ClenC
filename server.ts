@@ -178,7 +178,7 @@ Return a JSON object conforming to the schema with:
  */
 app.post('/api/validate-waste-report-image', async (req: Request, res: Response) => {
   try {
-    const { imageBase64, mimeType = 'image/jpeg', fileName = 'evidence.jpg' } = req.body;
+    const { imageBase64, mimeType = 'image/jpeg', fileName = 'evidence.jpg', clientVisionAnalysis } = req.body;
 
     if (!imageBase64) {
       return res.status(400).json({
@@ -233,6 +233,9 @@ app.post('/api/validate-waste-report-image', async (req: Request, res: Response)
     }
 
     if (!ai) {
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return res.json(clientVisionAnalysis);
+      }
       return res.json(fallbackWasteValidation(fileName));
     }
 
@@ -318,6 +321,9 @@ Return JSON conforming to schema:
         },
       });
     } catch (primaryErr: any) {
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return res.json(clientVisionAnalysis);
+      }
       if (isAuthError(primaryErr)) {
         return res.json(fallbackWasteValidation(fileName));
       }
@@ -339,6 +345,9 @@ Return JSON conforming to schema:
     try {
       parsedResult = parseJsonSafely(outputText);
     } catch {
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return res.json(clientVisionAnalysis);
+      }
       parsedResult = fallbackWasteValidation(fileName);
     }
 
@@ -346,6 +355,10 @@ Return JSON conforming to schema:
   } catch (error: any) {
     if (!isAuthError(error)) {
       console.warn('Waste verification notice:', error?.message || error);
+    }
+    const { clientVisionAnalysis } = req.body || {};
+    if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+      return res.json(clientVisionAnalysis);
     }
     return res.json(fallbackWasteValidation(req.body?.fileName || 'evidence.jpg'));
   }

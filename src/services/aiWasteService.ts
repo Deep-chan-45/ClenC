@@ -1,4 +1,5 @@
 import { WasteClassificationResult, ComplaintCategory } from '../types';
+import { CivicVisionScanResult } from './imageWasteAnalyzer';
 
 /**
  * Statutory Kanpur SWM 2026 Municipal Knowledge Engine
@@ -179,7 +180,8 @@ export interface WastePhotoValidationResult {
  */
 export async function validateWasteReportPhoto(
   imageBase64: string,
-  fileName: string
+  fileName: string,
+  clientVisionAnalysis?: CivicVisionScanResult
 ): Promise<WastePhotoValidationResult> {
   // Fast path: Check for obvious dummy or synthetic markers
   if (
@@ -222,7 +224,7 @@ export async function validateWasteReportPhoto(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const resp = await fetch('/api/validate-waste-report-image', {
       method: 'POST',
@@ -233,6 +235,7 @@ export async function validateWasteReportPhoto(
         imageBase64: cleanBase64,
         mimeType: 'image/jpeg',
         fileName,
+        clientVisionAnalysis,
       }),
       signal: controller.signal,
     });
@@ -247,7 +250,18 @@ export async function validateWasteReportPhoto(
       }
     }
   } catch (err) {
-    console.warn('[aiWasteService] Image validation API call failed or timed out:', err);
+    console.warn('[aiWasteService] Server validation endpoint unavailable, using civic vision analysis:', err);
+  }
+
+  // If client-side visual pixel inspection was performed, use its real visual classification!
+  if (clientVisionAnalysis) {
+    return {
+      isValidWaste: clientVisionAnalysis.isValidWaste,
+      detectedContent: clientVisionAnalysis.detectedContent,
+      confidence: clientVisionAnalysis.confidence,
+      categoryMatch: clientVisionAnalysis.categoryMatch,
+      reason: clientVisionAnalysis.reason,
+    };
   }
 
   // Graceful heuristic validation: Check for explicit spam keywords

@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = await parseRequestBody(req);
-    const { imageBase64, mimeType = 'image/jpeg', fileName = 'evidence.jpg' } = body || {};
+    const { imageBase64, mimeType = 'image/jpeg', fileName = 'evidence.jpg', clientVisionAnalysis } = body || {};
 
     if (!imageBase64) {
       return sendJson(res, 400, {
@@ -85,7 +85,9 @@ export default async function handler(req: any, res: any) {
     const ai = getGeminiClient();
 
     if (!ai) {
-      console.warn('GEMINI_API_KEY is not set on Vercel, using statutory heuristic waste validator.');
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return sendJson(res, 200, clientVisionAnalysis);
+      }
       return sendJson(res, 200, fallbackWasteValidation(fileName));
     }
 
@@ -171,6 +173,9 @@ Return JSON conforming to schema:
         },
       });
     } catch (primaryErr: any) {
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return sendJson(res, 200, clientVisionAnalysis);
+      }
       if (isAuthError(primaryErr)) {
         return sendJson(res, 200, fallbackWasteValidation(fileName));
       }
@@ -192,6 +197,9 @@ Return JSON conforming to schema:
     try {
       parsedResult = parseJsonSafely(outputText);
     } catch {
+      if (clientVisionAnalysis && typeof clientVisionAnalysis.isValidWaste === 'boolean') {
+        return sendJson(res, 200, clientVisionAnalysis);
+      }
       parsedResult = fallbackWasteValidation(fileName);
     }
 
@@ -201,6 +209,9 @@ Return JSON conforming to schema:
       console.warn('Waste verification notice:', error?.message || error);
     }
     const body = await parseRequestBody(req).catch(() => ({}));
+    if (body?.clientVisionAnalysis && typeof body.clientVisionAnalysis.isValidWaste === 'boolean') {
+      return sendJson(res, 200, body.clientVisionAnalysis);
+    }
     return sendJson(res, 200, fallbackWasteValidation(body?.fileName || 'evidence.jpg'));
   }
 }
