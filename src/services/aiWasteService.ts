@@ -265,24 +265,36 @@ export async function validateWasteReportPhoto(
   }
 
   // Graceful heuristic validation: Check for explicit spam keywords
-  const explicitSpam = ['selfie', 'my_pet', 'my_cat', 'my_dog', 'screenshot', 'invoice', 'receipt'];
+  const explicitSpam = ['selfie', 'my_pet', 'my_cat', 'my_dog', 'screenshot', 'invoice', 'receipt', 'avatar', 'profile'];
   const isSpam = explicitSpam.some((s) => lowerName.includes(s));
   if (isSpam) {
     return {
       isValidWaste: false,
       detectedContent: 'Suspected Unrelated Personal File',
-      confidence: 88,
+      confidence: 92,
       categoryMatch: 'None',
       reason: 'The file name indicates an unrelated image. Please upload a real photo of the waste issue.',
     };
   }
 
+  const wasteKeywords = ['garbage', 'waste', 'kachra', 'trash', 'litter', 'dustbin', 'dump', 'malba', 'rubble'];
+  const hasWasteKeyword = wasteKeywords.some((w) => lowerName.includes(w));
+  if (hasWasteKeyword) {
+    return {
+      isValidWaste: true,
+      detectedContent: 'Municipal Waste Site Evidence',
+      confidence: 91,
+      categoryMatch: 'Garbage on road',
+      reason: 'Photo accepted as municipal sanitation site evidence.',
+    };
+  }
+
   return {
-    isValidWaste: true,
-    detectedContent: 'Civic Site Evidence Logged',
-    confidence: 93,
-    categoryMatch: 'Garbage on road',
-    reason: 'Photo accepted as municipal sanitation site evidence.',
+    isValidWaste: false,
+    detectedContent: 'Unverified Subject / No Visible Waste',
+    confidence: 88,
+    categoryMatch: 'None',
+    reason: 'No municipal waste or street sanitation issue was identified. Kanpur Nagar Nigam requires visual evidence showing the actual waste problem.',
   };
 }
 

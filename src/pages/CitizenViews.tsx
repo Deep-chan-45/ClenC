@@ -675,11 +675,12 @@ export const ReportIssueView: React.FC<{
             });
           } else {
             setWasteValidation({
-              status: 'valid',
-              isValidWaste: true,
-              detectedContent: 'Civic Site Evidence Verified',
-              confidence: 90,
-              reason: 'Visual evidence logged and ready for municipal review.',
+              status: 'invalid',
+              isValidWaste: false,
+              detectedContent: 'Unverified Image File',
+              confidence: 85,
+              categoryMatch: 'None',
+              reason: 'Could not verify authentic municipal waste evidence in this photo. Please upload a clear photo of the waste problem.',
             });
           }
         }
@@ -1050,15 +1051,15 @@ export const ReportIssueView: React.FC<{
                   <div className="p-4 border-2 border-[#B8332A] bg-[#FDF5F5] dark:bg-[#22100E] rounded-sm space-y-2.5 text-xs">
                     <div className="flex items-center justify-between font-bold text-[#B8332A] dark:text-[#F87171]">
                       <span className="flex items-center gap-1.5">
-                        <span>⚠️</span>
-                        <span>PHOTO CAUTION: POSSIBLE NON-WASTE SUBJECT</span>
+                        <span>⛔</span>
+                        <span>PHOTO REJECTED: NON-WASTE SUBJECT DETECTED</span>
                       </span>
-                      <span className="text-[10px] font-mono bg-[#B8332A]/15 px-2 py-0.5 rounded-xs font-bold">
-                        Verification Notice
+                      <span className="text-[10px] font-mono bg-[#B8332A]/15 text-[#B8332A] dark:text-[#F87171] px-2 py-0.5 rounded-xs font-bold uppercase">
+                        AI Inspection Failed
                       </span>
                     </div>
                     <div className="text-[#521E1B] dark:text-[#FCA5A5] text-xs font-semibold">
-                      Detected Subject: <span className="underline">{wasteValidation.detectedContent}</span>
+                      Detected Subject: <span className="font-bold underline">{wasteValidation.detectedContent}</span>
                     </div>
                     <p className="text-[#521E1B] dark:text-[#FCA5A5] text-[11px] leading-relaxed">
                       {wasteValidation.reason || 'Kanpur Nagar Nigam requires clear visual evidence of the actual waste issue or garbage.'}
@@ -1067,29 +1068,13 @@ export const ReportIssueView: React.FC<{
                       <button
                         type="button"
                         onClick={() => {
-                          setWasteValidation({
-                            status: 'valid',
-                            isValidWaste: true,
-                            detectedContent: 'Citizen Confirmed Waste Evidence',
-                            confidence: 100,
-                            categoryMatch: category,
-                            reason: 'Confirmed by citizen as active waste grievance site evidence.',
-                          });
-                        }}
-                        className="px-3 py-1.5 bg-[#15693F] hover:bg-[#105331] text-white text-xs font-semibold rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <span>✓</span>
-                        <span>Confirm: This Is Real Waste (Continue)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
                           const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
                           if (fileInput) fileInput.click();
                         }}
-                        className="px-3 py-1.5 border border-[#8DA395] hover:bg-white dark:hover:bg-[#1C2C24] text-xs font-semibold rounded-xs transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-[#B8332A] hover:bg-[#9B271F] text-white text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
-                        📸 Retake / Choose Another Photo
+                        <span>📸</span>
+                        <span>Upload Authentic Waste Photo</span>
                       </button>
                     </div>
                   </div>

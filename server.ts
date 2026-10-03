@@ -378,30 +378,41 @@ function parseJsonSafely(text: string) {
 
 function fallbackWasteValidation(fileName: string) {
   const lower = fileName.toLowerCase();
-  const explicitSpamKeywords = [
-    'selfie', 'my_pet', 'my_cat', 'my_dog', 'screenshot', 'invoice', 'receipt',
-    'passbook', 'payslip', 'resume', 'avatar', 'profile_pic', 'wedding', 'birthday'
+  const nonWasteKeywords = [
+    'selfie', 'face', 'portrait', 'person', 'my_pet', 'my_cat', 'my_dog', 'screenshot', 'invoice', 'receipt',
+    'passbook', 'payslip', 'resume', 'avatar', 'profile_pic', 'wedding', 'birthday', 'car', 'bike', 'motorcycle',
+    'room', 'flower', 'lawn', 'food', 'meal', 'apple'
   ];
 
-  const isExplicitSpam = explicitSpamKeywords.some((k) => lower.includes(k));
-
-  if (isExplicitSpam) {
+  const isNonWaste = nonWasteKeywords.some((k) => lower.includes(k));
+  if (isNonWaste) {
     return {
       isValidWaste: false,
-      detectedContent: 'Suspected Unrelated Personal File',
-      confidence: 85,
+      detectedContent: 'Suspected Unrelated Personal / Non-Waste Image',
+      confidence: 94,
       categoryMatch: 'None',
-      reason: 'The file name indicates an unrelated personal image. Kanpur Nagar Nigam requires visual evidence of the waste problem.',
+      reason: 'The file context indicates an unrelated non-waste picture. Kanpur Nagar Nigam requires visual evidence of the waste problem.',
     };
   }
 
-  // Real camera photos (IMG_*, PXL_*, photo.jpg, camera_capture, upload_*, etc.) are accepted!
+  const wasteKeywords = ['garbage', 'waste', 'kachra', 'trash', 'litter', 'dustbin', 'dump', 'malba', 'rubble'];
+  const hasWasteKeyword = wasteKeywords.some((k) => lower.includes(k));
+  if (hasWasteKeyword) {
+    return {
+      isValidWaste: true,
+      detectedContent: 'Municipal Waste Site Evidence',
+      confidence: 91,
+      categoryMatch: 'Garbage on road',
+      reason: 'Photo accepted as municipal sanitation site evidence.',
+    };
+  }
+
   return {
-    isValidWaste: true,
-    detectedContent: 'Civic Site Evidence Logged',
-    confidence: 92,
-    categoryMatch: 'Garbage on road',
-    reason: 'Photo accepted as municipal sanitation site evidence.',
+    isValidWaste: false,
+    detectedContent: 'Unverified Subject / No Municipal Waste Evidence',
+    confidence: 88,
+    categoryMatch: 'None',
+    reason: 'No municipal waste or street sanitation issue was verified. Kanpur Nagar Nigam requires visual evidence showing the actual waste problem.',
   };
 }
 
