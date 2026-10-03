@@ -17,16 +17,47 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+export function isValidGeminiKey(key?: string): boolean {
+  if (!key || typeof key !== 'string') return false;
+  const trimmed = key.trim();
+  if (
+    trimmed === '' ||
+    trimmed === 'MY_GEMINI_API_KEY' ||
+    trimmed === 'your_gemini_api_key_here' ||
+    trimmed.startsWith('AQ.')
+  ) {
+    return false;
+  }
+  return trimmed.length >= 20;
+}
+
+export function isAuthError(error: any): boolean {
+  const msg = String(error?.message || error || '');
+  const status = error?.status || error?.code;
+  return (
+    status === 401 ||
+    status === 403 ||
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('UNAUTHENTICATED') ||
+    msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') ||
+    msg.includes('invalid authentication credentials')
+  );
+}
+
 // Initialize Google GenAI client (telemetry User-Agent header)
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({
-  apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
+const rawApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const hasValidKey = isValidGeminiKey(rawApiKey);
+const ai = hasValidKey
+  ? new GoogleGenAI({
+      apiKey: rawApiKey.trim(),
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    })
+  : null;
 
 /**
  * Server-Side Gemini Vision Waste Classification Endpoint
@@ -45,8 +76,7 @@ app.post('/api/classify-waste-image', async (req: Request, res: Response) => {
     // Strip data URL header if present
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
 
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not set on server, using heuristic classifier fallback.');
+    if (!ai) {
       return res.json(getHeuristicFallback(fileName));
     }
 
@@ -132,7 +162,9 @@ Return a JSON object conforming to the schema with:
 
     return res.json(parsedResult);
   } catch (error: any) {
-    console.error('Gemini image classification error:', error);
+    if (!isAuthError(error)) {
+      console.warn('Gemini image classification notice:', error?.message || error);
+    }
     // Provide a graceful fallback result so the UI never crashes
     const fallback = getHeuristicFallback(req.body?.fileName || 'image');
     return res.json(fallback);
@@ -200,8 +232,7 @@ app.post('/api/validate-waste-report-image', async (req: Request, res: Response)
       });
     }
 
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not set on server, using heuristic waste validator.');
+    if (!ai) {
       return res.json(fallbackWasteValidation(fileName));
     }
 
@@ -287,28 +318,35 @@ Return JSON conforming to schema:
         },
       });
     } catch (primaryErr: any) {
-      console.warn('Primary vision call note, trying backup:', primaryErr?.message || primaryErr);
-      response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: [imagePart, textPrompt],
-        config: {
-          responseMimeType: 'application/json',
-        },
-      });
+      if (isAuthError(primaryErr)) {
+        return res.json(fallbackWasteValidation(fileName));
+      }
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [imagePart, textPrompt],
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+      } catch (backupErr: any) {
+        return res.json(fallbackWasteValidation(fileName));
+      }
     }
 
-    const outputText = response.text?.trim() || '';
+    const outputText = response?.text?.trim() || '';
     let parsedResult;
     try {
       parsedResult = parseJsonSafely(outputText);
     } catch {
-      console.warn('Could not parse Gemini waste validation response:', outputText);
       parsedResult = fallbackWasteValidation(fileName);
     }
 
     return res.json(parsedResult);
   } catch (error: any) {
-    console.error('Waste verification error:', error);
+    if (!isAuthError(error)) {
+      console.warn('Waste verification notice:', error?.message || error);
+    }
     return res.json(fallbackWasteValidation(req.body?.fileName || 'evidence.jpg'));
   }
 });
@@ -413,8 +451,7 @@ app.post('/api/classify-waste-item', async (req: Request, res: Response) => {
 
     const trimmedQuery = query.trim();
 
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not set, using heuristic knowledge engine for query:', trimmedQuery);
+    if (!ai) {
       return res.json(getComprehensiveWasteClassification(trimmedQuery));
     }
 
@@ -497,27 +534,34 @@ Return strict JSON conforming to this schema.`;
         },
       });
     } catch (primaryErr: any) {
-      console.warn('Gemini 3.1 flash-lite query note, trying backup model:', primaryErr?.message || primaryErr);
-      response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: promptText,
-        config: { responseMimeType: 'application/json' },
-      });
+      if (isAuthError(primaryErr)) {
+        return res.json(getComprehensiveWasteClassification(trimmedQuery));
+      }
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: promptText,
+          config: { responseMimeType: 'application/json' },
+        });
+      } catch (backupErr: any) {
+        return res.json(getComprehensiveWasteClassification(trimmedQuery));
+      }
     }
 
-    const outputText = response.text?.trim() || '';
+    const outputText = response?.text?.trim() || '';
     let parsedResult;
     try {
       parsedResult = parseJsonSafely(outputText);
       parsedResult.isAiGenerated = true;
     } catch {
-      console.warn('Could not parse JSON item classification, using knowledge engine fallback:', outputText);
       parsedResult = getComprehensiveWasteClassification(trimmedQuery);
     }
 
     return res.json(parsedResult);
   } catch (error: any) {
-    console.error('Waste classification query error:', error);
+    if (!isAuthError(error)) {
+      console.warn('Waste classification notice:', error?.message || error);
+    }
     return res.json(getComprehensiveWasteClassification(req.body?.query || 'waste item'));
   }
 });

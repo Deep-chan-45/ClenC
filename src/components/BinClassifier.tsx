@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { WasteClassificationResult } from '../types';
 import {
   IconSearch,
@@ -8,7 +8,9 @@ import {
   IconHazardAlert,
   IconBin,
   IconCheck,
+  IconCamera,
 } from './Icons';
+import { classifyWasteItem, classifyWasteImage } from '../services/aiWasteService';
 
 interface BinClassifierProps {
   variant?: 'compact' | 'full';
@@ -58,6 +60,8 @@ export const BinClassifier: React.FC<BinClassifierProps> = ({
   const [result, setResult] = useState<WasteClassificationResult>(DEFAULT_RESULT);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activePhotoName, setActivePhotoName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchClassification = async (itemQuery: string) => {
     const q = itemQuery.trim();
@@ -65,26 +69,46 @@ export const BinClassifier: React.FC<BinClassifierProps> = ({
 
     setIsLoading(true);
     setError(null);
+    setActivePhotoName(null);
 
     try {
-      const response = await fetch('/api/classify-waste-item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Classification error: HTTP ${response.status}`);
-      }
-
-      const data: WasteClassificationResult = await response.json();
+      const data = await classifyWasteItem(q);
       setResult(data);
     } catch (err: any) {
-      console.warn('API error, using local fallback:', err);
-      // Soft fallback so UI never breaks
-      setError('Live AI lookup timed out. Showing municipal rule-based fallback.');
+      console.warn('Classification error, using fallback:', err);
+      setError('Live AI lookup timed out. Showing statutory municipal rule-based fallback.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActivePhotoName(file.name);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = (reader.result as string) || '';
+          const data = await classifyWasteImage(base64, file.name);
+          setResult(data);
+          setQuery(data.item);
+        } catch (err) {
+          console.warn('Image classification error:', err);
+          setError('Could not scan photo. Showing statutory municipal classification.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setIsLoading(false);
+      setError('Failed to read image file.');
     }
   };
 
@@ -172,30 +196,59 @@ export const BinClassifier: React.FC<BinClassifierProps> = ({
 
       {/* Search Input Bar */}
       <form onSubmit={handleSubmit} className="space-y-2.5">
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoSelect}
+          className="hidden"
+        />
+
         <div className="relative flex items-center">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search any item (e.g. thermocol, medicine bottle, pizza box, coconut shell, tubelight, chips wrapper)..."
-            className="w-full h-11 pl-10 pr-24 text-xs sm:text-sm bg-[#EAEFE7] dark:bg-[#101C16] border border-[#B8C7BC] dark:border-[#283E33] rounded-sm text-[#122017] dark:text-[#E7EFEA] focus:border-[#15693F] dark:focus:border-[#68C88E] focus:outline-none transition-colors"
+            className="w-full h-11 pl-10 pr-32 text-xs sm:text-sm bg-[#EAEFE7] dark:bg-[#101C16] border border-[#B8C7BC] dark:border-[#283E33] rounded-sm text-[#122017] dark:text-[#E7EFEA] focus:border-[#15693F] dark:focus:border-[#68C88E] focus:outline-none transition-colors"
           />
           <IconSearch className="w-4 h-4 text-[#485B4F] dark:text-[#98AEA0] absolute left-3.5" />
-          <button
-            type="submit"
-            disabled={isLoading || !query.trim()}
-            className="absolute right-1.5 h-8 px-3 text-xs font-semibold bg-[#15693F] hover:bg-[#105331] text-white rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                <span>Searching...</span>
-              </>
-            ) : (
-              <span>Search</span>
-            )}
-          </button>
+          
+          <div className="absolute right-1.5 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Scan or upload a waste photo"
+              className="h-8 px-2.5 text-xs font-mono font-semibold bg-[#E0ECE2] hover:bg-[#D0E2D4] dark:bg-[#1C3325] dark:hover:bg-[#254231] text-[#15693F] dark:text-[#68C88E] border border-[#A8C7B0] dark:border-[#2F523A] rounded-xs transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <IconCamera className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Photo</span>
+            </button>
+
+            <button
+              type="submit"
+              disabled={isLoading || !query.trim()}
+              className="h-8 px-3 text-xs font-semibold bg-[#15693F] hover:bg-[#105331] text-white rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>...</span>
+                </>
+              ) : (
+                <span>Search</span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {activePhotoName && (
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#15693F] dark:text-[#68C88E]">
+            <span>📷 Classified from image:</span>
+            <span className="font-semibold underline truncate max-w-xs">{activePhotoName}</span>
+          </div>
+        )}
 
         {/* Quick Suggestion Chips */}
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">

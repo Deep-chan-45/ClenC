@@ -51,6 +51,8 @@ import {
   getCollectorWorkerProfile,
   COLLECTOR_DEMO_EMAIL,
   withTimeout,
+  DUMMY_COMPLAINT_IDS,
+  DUMMY_PICKUP_IDS,
 } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -84,11 +86,53 @@ export function App() {
     }
   });
   const [user, setUser] = useState<UserProfile>(authUser || GUEST_USER);
-  const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
-  const [pickups, setPickups] = useState<PickupRequest[]>(INITIAL_PICKUPS);
-  const [selectedComplaintId, setSelectedComplaintId] = useState<string>(
-    INITIAL_COMPLAINTS[0].id
-  );
+  const [complaints, setComplaints] = useState<Complaint[]>(() => {
+    try {
+      const saved = localStorage.getItem('clenc_complaints_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const authentic = parsed.filter(
+            (c: Complaint) => c && c.id && !DUMMY_COMPLAINT_IDS.includes(c.id)
+          );
+          localStorage.setItem('clenc_complaints_cache', JSON.stringify(authentic));
+          return authentic;
+        }
+      }
+    } catch (_) {}
+    return INITIAL_COMPLAINTS;
+  });
+  const [pickups, setPickups] = useState<PickupRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('clenc_pickups_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const authentic = parsed.filter(
+            (p: PickupRequest) => p && p.id && !DUMMY_PICKUP_IDS.includes(p.id)
+          );
+          localStorage.setItem('clenc_pickups_cache', JSON.stringify(authentic));
+          return authentic;
+        }
+      }
+    } catch (_) {}
+    return INITIAL_PICKUPS;
+  });
+  const [selectedComplaintId, setSelectedComplaintId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('clenc_complaints_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const first = parsed.find(
+            (c: Complaint) => c && c.id && !DUMMY_COMPLAINT_IDS.includes(c.id)
+          );
+          if (first) return first.id;
+        }
+      }
+    } catch (_) {}
+    return INITIAL_COMPLAINTS[0]?.id || '';
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [legalModal, setLegalModal] = useState<'tos' | 'privacy' | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
@@ -98,7 +142,7 @@ export function App() {
   // Initialize Firebase connection, auth listener, and real-time Firestore sync
   useEffect(() => {
     testConnection();
-    seedInitialKanpurDataIfEmpty(INITIAL_COMPLAINTS, INITIAL_PICKUPS);
+    seedInitialKanpurDataIfEmpty();
 
     // Listen to Firebase Authentication State
     const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
@@ -266,9 +310,13 @@ export function App() {
     // Real-time Firestore sync for complaints
     const unsubscribeComplaints = subscribeToComplaints(
       (liveComplaints) => {
-        if (liveComplaints && liveComplaints.length > 0) {
-          setComplaints(liveComplaints);
-        }
+        const authentic = (liveComplaints || []).filter(
+          (c) => c && c.id && !DUMMY_COMPLAINT_IDS.includes(c.id)
+        );
+        setComplaints(authentic);
+        try {
+          localStorage.setItem('clenc_complaints_cache', JSON.stringify(authentic));
+        } catch (_) {}
       },
       () => {
         // Fall back quietly if firestore offline
@@ -279,9 +327,13 @@ export function App() {
     // Real-time Firestore sync for pickup bookings
     const unsubscribePickups = subscribeToPickups(
       (livePickups) => {
-        if (livePickups && livePickups.length > 0) {
-          setPickups(livePickups);
-        }
+        const authentic = (livePickups || []).filter(
+          (p) => p && p.id && !DUMMY_PICKUP_IDS.includes(p.id)
+        );
+        setPickups(authentic);
+        try {
+          localStorage.setItem('clenc_pickups_cache', JSON.stringify(authentic));
+        } catch (_) {}
       },
       () => {
         setFirebaseConnected(false);
@@ -317,26 +369,54 @@ export function App() {
       setAuthNotice('');
     }
 
+    // MANDATORY AUTH GUARD: Unauthenticated citizens cannot access citizen hub, report issue, or book pickups
+    if (!authUser && (page === 'report-issue' || page === 'pickup-request' || page === 'citizen-dashboard')) {
+      sessionStorage.setItem('clenc_pending_page', page);
+      if (page === 'report-issue') {
+        setAuthNotice(
+          'Registration / Sign In Required: Please register or sign in before reporting a waste issue so your report can be verified, tracked, and stored in the municipal database.'
+        );
+      } else if (page === 'pickup-request') {
+        setAuthNotice(
+          'Registration / Sign In Required: Please register or sign in to book a doorstep bulk waste collection pickup.'
+        );
+      } else {
+        setAuthNotice(
+          'Registration / Sign In Required: Please sign in or register to access the Citizen Portal.'
+        );
+      }
+      setAuthInitialRole('citizen');
+      setCurrentPage('auth');
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      return;
+    }
+
     // Route guard: Only Municipal Admins can access admin-dashboard
     if (page === 'admin-dashboard') {
-      const currentEmail = (auth.currentUser?.email || user.contact || user.email || '').trim().toLowerCase();
-      if (user.role !== 'admin' && currentEmail !== MUNICIPAL_ADMIN_EMAIL) {
-        showToast('Access Denied: Only Municipal Admins (deepaksachan450@gmail.com) can access the Admin Console.');
+      const currentEmail = (auth.currentUser?.email || authUser?.contact || authUser?.email || '').trim().toLowerCase();
+      if (!authUser || (authUser.role !== 'admin' && currentEmail !== MUNICIPAL_ADMIN_EMAIL)) {
+        sessionStorage.setItem('clenc_pending_page', 'admin-dashboard');
+        setAuthNotice('Municipal Admin Login Required: Please sign in with official municipal administrative credentials.');
+        setAuthInitialRole('admin');
+        setCurrentPage('auth');
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
         return;
       }
     }
 
     // Route guard: Only Safai Mitra (Workers) and Municipal Admins can access worker-dashboard
-    if (page === 'worker-dashboard' && user.role !== 'worker' && user.role !== 'admin') {
-      sessionStorage.setItem('clenc_pending_page', 'worker-dashboard');
-      setAuthNotice(
-        'Safai Mitra / Collector Login Required: Please sign in with your collector credentials to access your daily beat task panel.'
-      );
-      setAuthInitialRole('worker');
-      showToast('Safai Mitra / Collector Login Required to open the Worker Task Panel.');
-      setCurrentPage('auth');
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-      return;
+    if (page === 'worker-dashboard') {
+      if (!authUser || (authUser.role !== 'worker' && authUser.role !== 'admin')) {
+        sessionStorage.setItem('clenc_pending_page', 'worker-dashboard');
+        setAuthNotice(
+          'Safai Mitra / Collector Login Required: Please sign in with your collector credentials to access your daily beat task panel.'
+        );
+        setAuthInitialRole('worker');
+        showToast('Safai Mitra / Collector Login Required to open the Worker Task Panel.');
+        setCurrentPage('auth');
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+        return;
+      }
     }
 
     setCurrentPage(page);
@@ -414,8 +494,12 @@ export function App() {
   };
 
   const handleSubmitComplaint = async (newCmp: Complaint) => {
-    // 1. Optimistic state update
-    setComplaints((prev) => [newCmp, ...prev]);
+    // 1. Optimistic state update & local storage cache
+    const updated = [newCmp, ...complaints.filter((c) => c.id !== newCmp.id)];
+    setComplaints(updated);
+    try {
+      localStorage.setItem('clenc_complaints_cache', JSON.stringify(updated));
+    } catch (_) {}
     setSelectedComplaintId(newCmp.id);
     const newPoints = (user.points || 0) + 30;
     const updatedUser = { ...user, points: newPoints };
@@ -468,7 +552,12 @@ export function App() {
   };
 
   const handleCreatePickup = (newPkp: PickupRequest) => {
-    setPickups((prev) => [newPkp, ...prev]);
+    const updated = [newPkp, ...pickups.filter((p) => p.id !== newPkp.id)];
+    setPickups(updated);
+    try {
+      localStorage.setItem('clenc_pickups_cache', JSON.stringify(updated));
+    } catch (_) {}
+
     const newPoints = user.points + 40;
     setUser((prev) => ({ ...prev, points: newPoints }));
 
@@ -496,14 +585,17 @@ export function App() {
     ];
     let nextStatus: PickupStatus | undefined;
 
-    setPickups((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const idx = order.indexOf(p.status);
-        nextStatus = order[Math.min(idx + 1, order.length - 1)];
-        return { ...p, status: nextStatus };
-      })
-    );
+    const updated = pickups.map((p) => {
+      if (p.id !== id) return p;
+      const idx = order.indexOf(p.status);
+      nextStatus = order[Math.min(idx + 1, order.length - 1)];
+      return { ...p, status: nextStatus };
+    });
+
+    setPickups(updated);
+    try {
+      localStorage.setItem('clenc_pickups_cache', JSON.stringify(updated));
+    } catch (_) {}
 
     if (nextStatus) {
       updatePickupStatusInFirestore(id, nextStatus).catch(() => {});
@@ -517,29 +609,33 @@ export function App() {
     feedback: string
   ) => {
     let updatedTimeline: Complaint['timeline'] = [];
-    setComplaints((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        updatedTimeline = c.timeline.map((t) =>
-          t.status === 'Closed'
-            ? {
-                ...t,
-                timestamp: '30 Sep 2026, Verified',
-                note: `Citizen confirmed resolved (${rating}/5 stars): "${feedback}"`,
-                completed: true,
-              }
-            : { ...t, completed: true }
-        );
-        return {
-          ...c,
-          status: 'Closed',
-          slaHoursRemaining: 0,
-          rating,
-          feedback,
-          timeline: updatedTimeline,
-        };
-      })
-    );
+    const updated: Complaint[] = complaints.map((c) => {
+      if (c.id !== id) return c;
+      updatedTimeline = c.timeline.map((t) =>
+        t.status === 'Closed'
+          ? {
+              ...t,
+              timestamp: 'Verified by Citizen',
+              note: `Citizen confirmed resolved (${rating}/5 stars): "${feedback}"`,
+              completed: true,
+            }
+          : { ...t, completed: true }
+      );
+      return {
+        ...c,
+        status: 'Closed' as ComplaintStatus,
+        slaHoursRemaining: 0,
+        rating,
+        feedback,
+        timeline: updatedTimeline,
+      };
+    });
+
+    setComplaints(updated);
+    try {
+      localStorage.setItem('clenc_complaints_cache', JSON.stringify(updated));
+    } catch (_) {}
+
     const newPoints = user.points + 50;
     setUser((prev) => ({ ...prev, points: newPoints }));
 
@@ -560,27 +656,30 @@ export function App() {
 
   const handleReopenComplaint = (id: string, reason: string) => {
     let updatedTimeline: Complaint['timeline'] = [];
-    setComplaints((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        updatedTimeline = [
-          ...c.timeline,
-          {
-            status: 'Reopened',
-            timestamp: '30 Sep 2026, Escalated',
-            actor: user.name,
-            note: `Reopened by citizen: ${reason}`,
-            completed: true,
-          },
-        ];
-        return {
-          ...c,
-          status: 'Reopened',
-          slaHoursRemaining: -4,
-          timeline: updatedTimeline,
-        };
-      })
-    );
+    const updated: Complaint[] = complaints.map((c) => {
+      if (c.id !== id) return c;
+      updatedTimeline = [
+        ...c.timeline,
+        {
+          status: 'Reopened' as ComplaintStatus,
+          timestamp: 'Just now',
+          actor: user.name,
+          note: `Reopened by citizen: ${reason}`,
+          completed: true,
+        },
+      ];
+      return {
+        ...c,
+        status: 'Reopened' as ComplaintStatus,
+        slaHoursRemaining: -4,
+        timeline: updatedTimeline,
+      };
+    });
+
+    setComplaints(updated);
+    try {
+      localStorage.setItem('clenc_complaints_cache', JSON.stringify(updated));
+    } catch (_) {}
 
     updateComplaintInFirestore(id, {
       status: 'Reopened',
@@ -599,35 +698,55 @@ export function App() {
     let updatedTimeline: Complaint['timeline'] = [];
     let photo: string | undefined;
 
-    setComplaints((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        photo = afterPhoto || c.afterPhoto;
-        updatedTimeline = c.timeline.map((t) =>
-          t.status === status
-            ? {
-                ...t,
-                timestamp: '30 Sep 2026, Updated',
-                completed: true,
-              }
-            : t
-        );
-        return {
-          ...c,
-          status,
-          afterPhoto: photo,
-          timeline: updatedTimeline,
-        };
-      })
-    );
+    const nowStr = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const updated = complaints.map((c) => {
+      if (c.id !== id) return c;
+      photo = afterPhoto || c.afterPhoto;
+      updatedTimeline = c.timeline.map((t) => {
+        if (t.status === status) {
+          return {
+            ...t,
+            timestamp: `${nowStr}, Verified`,
+            completed: true,
+            note: status === 'Resolved'
+              ? 'Site cleared and verified with completion photograph by Safai Mitra.'
+              : t.note,
+          };
+        }
+        if (status === 'Resolved' && (t.status === 'Assigned' || t.status === 'In Progress' || t.status === 'Verified' || t.status === 'Submitted')) {
+          return { ...t, completed: true };
+        }
+        return t;
+      });
+      return {
+        ...c,
+        status,
+        afterPhoto: photo,
+        slaHoursRemaining: status === 'Resolved' || status === 'Closed' ? 0 : c.slaHoursRemaining,
+        timeline: updatedTimeline,
+      };
+    });
+
+    setComplaints(updated);
+    try {
+      localStorage.setItem('clenc_complaints_cache', JSON.stringify(updated));
+    } catch (_) {}
 
     updateComplaintInFirestore(id, {
       status,
       afterPhoto: photo,
+      slaHoursRemaining: status === 'Resolved' || status === 'Closed' ? 0 : undefined,
       timeline: updatedTimeline,
     }).catch(() => {});
 
-    showToast(`Complaint ${id} updated to "${status}" (Stored in Firebase)`);
+    showToast(`Complaint ${id} updated to "${status}" with photo verification (Stored in Firebase)`);
   };
 
   const handleAssignWorker = (complaintId: string, workerId: string) => {
@@ -714,7 +833,31 @@ export function App() {
           <LandingPage
             language={language}
             onNavigate={handleNavigate}
-            onQuickRoleLogin={handleRoleRedirect}
+            onQuickRoleLogin={(role) => {
+              if (!authUser) {
+                sessionStorage.setItem(
+                  'clenc_pending_page',
+                  role === 'admin'
+                    ? 'admin-dashboard'
+                    : role === 'worker'
+                    ? 'worker-dashboard'
+                    : 'citizen-dashboard'
+                );
+                setAuthNotice(
+                  `Sign In / Registration Required: Please sign in or register to access the ${
+                    role === 'worker'
+                      ? 'Safai Mitra Task Panel'
+                      : role === 'admin'
+                      ? 'Municipal Admin Console'
+                      : 'Citizen Portal'
+                  }.`
+                );
+                setAuthInitialRole(role);
+                handleNavigate('auth');
+                return;
+              }
+              handleRoleRedirect(role);
+            }}
             onOpenLegal={(type) => setLegalModal(type)}
             resolvedCount={
               complaints.filter(
@@ -763,7 +906,7 @@ export function App() {
             onSubmitComplaint={handleSubmitComplaint}
             onUpvoteComplaint={handleUpvoteComplaint}
             onSelectComplaintToTrack={(id) => setSelectedComplaintId(id)}
-            isLoggedIn={true}
+            isLoggedIn={Boolean(authUser)}
             onRequireLogin={() => {
               sessionStorage.setItem('clenc_pending_page', 'report-issue');
               setAuthNotice(
@@ -773,24 +916,16 @@ export function App() {
               handleNavigate('auth');
             }}
             onQuickCitizenLogin={() => {
-              handleRoleRedirect('citizen', {
-                name: 'Priya Sharma',
-                contact: '+91 94150 12844',
-                role: 'citizen',
-                ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
-                address: '48, Model Town, Motijheel, Kanpur',
-              });
-              handleNavigate('report-issue');
+              sessionStorage.setItem('clenc_pending_page', 'report-issue');
+              setAuthNotice('Please sign in or register with your citizen account to submit complaints.');
+              setAuthInitialRole('citizen');
+              handleNavigate('auth');
             }}
             onQuickCollectorLogin={() => {
-              handleRoleRedirect('worker', {
-                name: 'Rameshwar Pal',
-                contact: '+91 94150 11801',
-                role: 'worker',
-                ward: 'Ward 14 - Swaroop Nagar & Arya Nagar',
-                address: 'Zonal Sanitation Depot 14, Swaroop Nagar, Kanpur',
-              });
-              handleNavigate('worker-dashboard');
+              sessionStorage.setItem('clenc_pending_page', 'worker-dashboard');
+              setAuthNotice('Safai Mitra / Collector Login Required: Please sign in with your collector credentials.');
+              setAuthInitialRole('worker');
+              handleNavigate('auth');
             }}
           />
         )}

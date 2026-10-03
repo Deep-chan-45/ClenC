@@ -104,36 +104,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  // Auto-fill demo credentials for quick testing
-  const handleFillDemoCreds = (role: Role) => {
-    setSelectedRole(role);
-    if (role === 'citizen') {
-      setEmail('citizen@kanpur.clenc.in');
-      setPassword('Kanpur@Clean2026');
-      setName('Priya Sharma');
-      setContact('+91 94150 12844');
-      setUserType('Household');
-      setWard('Ward 14 - Swaroop Nagar & Arya Nagar');
-      setAddress('48, Model Town, Motijheel, Kanpur');
-    } else if (role === 'worker') {
-      setEmail('collector.ward14@kanpur.clenc.in');
-      setPassword('Kanpur@Clean2026');
-      setName('Rameshwar Pal');
-      setContact('+91 98390 12345');
-      setUserType('Public Place');
-      setWard('Ward 14 - Swaroop Nagar & Arya Nagar');
-      setAddress('Zonal Sanitation Depot 14, Swaroop Nagar');
-    } else {
-      setEmail('deepaksachan450@gmail.com');
-      setPassword('123456');
-      setName('Deepak Sachan');
-      setContact('+91 94150 99881');
-      setUserType('Commercial');
-      setWard('Ward 07 - Civil Lines & Mall Road');
-      setAddress('Kanpur Nagar Nigam HQ, Moti Jheel Compound');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -350,137 +320,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 border border-[#C5D0C8] dark:border-[#24382E] bg-[#EAEFE7] dark:bg-[#13201A] rounded-sm overflow-hidden shadow-xs">
-        {/* LEFT SPLIT PANEL: Civic Identity & Role Quick-Launch */}
-        <div className="lg:col-span-5 p-6 sm:p-8 bg-[#E1E8DF] dark:bg-[#0F1A15] border-b lg:border-b-0 lg:border-r border-[#C5D0C8] dark:border-[#24382E] flex flex-col justify-between space-y-8">
-          <div className="space-y-6">
-            <ClenCLogo variant="full" />
-
-            <div className="space-y-2">
-              <div className="text-xs font-mono font-semibold text-[#15693F] dark:text-[#68C88E]">
-                FIREBASE UNIFIED CIVIC ACCESS
-              </div>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#122017] dark:text-[#E7EFEA]">
-                Sign in or register as Citizen, Collector, or Municipal Admin.
-              </h1>
-              <p className="text-sm text-[#35483D] dark:text-[#A8BEB1] leading-relaxed">
-                Your credentials, bookings, waste segregation points, and grievance history are synchronized directly with your <strong>clenc-e382f</strong> Firebase backend.
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div className="text-xs font-mono font-semibold text-[#2E4035] dark:text-[#98AEA0]">
-                ROLE WORKSPACE SPECIFICATIONS:
-              </div>
-
-              <div
-                onClick={() => handleFillDemoCreds('citizen')}
-                className={`p-3.5 border rounded-sm space-y-1 cursor-pointer transition-all ${
-                  selectedRole === 'citizen'
-                    ? 'border-[#15693F] bg-[#E0EFE5] dark:bg-[#163324]'
-                    : 'border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] hover:border-[#15693F]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-[#15693F] dark:text-[#68C88E]">
-                    01 · CITIZEN / RWA / CAMPUS
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-[#15693F]/10 text-[#15693F] dark:text-[#68C88E]">
-                    Click to Auto-fill Demo
-                  </span>
-                </div>
-                <p className="text-xs text-[#35483D] dark:text-[#A8BEB1]">
-                  Book special 4-stream pickups, track SLA resolution timelines, and earn gamified segregation points.
-                </p>
-              </div>
-
-              <div
-                onClick={() => handleFillDemoCreds('worker')}
-                className={`p-3.5 border rounded-sm space-y-1 cursor-pointer transition-all ${
-                  selectedRole === 'worker'
-                    ? 'border-[#0F626A] bg-[#DFEFF1] dark:bg-[#142B30]'
-                    : 'border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] hover:border-[#0F626A]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-[#0F626A] dark:text-[#66C7D0]">
-                    02 · COLLECTOR / SAFAI MITRA
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-[#0F626A]/10 text-[#0F626A] dark:text-[#66C7D0]">
-                    Click to Auto-fill Demo
-                  </span>
-                </div>
-                <p className="text-xs text-[#35483D] dark:text-[#A8BEB1]">
-                  View daily assigned ward beat, update pickup statuses, and upload mandatory resolution verification photos.
-                </p>
-              </div>
-
-              <div
-                onClick={() => handleFillDemoCreds('admin')}
-                className={`p-3.5 border rounded-sm space-y-1.5 cursor-pointer transition-all ${
-                  selectedRole === 'admin'
-                    ? 'border-[#B86B11] bg-[#F7EFE3] dark:bg-[#302313]'
-                    : 'border-[#B8C7BC] dark:border-[#263C31] bg-[#F4F6F2] dark:bg-[#16261E] hover:border-[#B86B11]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-[#B86B11] dark:text-[#F0AD5E]">
-                    03 · MUNICIPAL ADMIN (KNN)
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-[#B86B11]/10 text-[#B86B11] dark:text-[#F0AD5E]">
-                    Click to Auto-fill
-                  </span>
-                </div>
-                <p className="text-xs text-[#35483D] dark:text-[#A8BEB1]">
-                  Municipal command console: SLA breach alerts, worker dispatch, ward heatmaps, and dataset downloads.
-                </p>
-                <div className="pt-1 flex items-center justify-between text-[11px] font-mono border-t border-[#B86B11]/20 text-[#874A08] dark:text-[#F3B872]">
-                  <span>deepaksachan450@gmail.com</span>
-                  <span className="bg-[#B86B11]/10 px-1.5 py-0.5 rounded-xs font-bold">Pass: 123456</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Demo Pre-fill Access */}
-          <div className="pt-4 border-t border-[#BDCCC1] dark:border-[#24382E] space-y-2">
-            <div className="text-xs font-mono font-semibold text-[#35483D] dark:text-[#98AEA0]">
-              AUTO-FILL VERIFIED CREDENTIALS:
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleFillDemoCreds('citizen')}
-                className="py-2 px-2.5 text-xs font-semibold bg-[#15693F] hover:bg-[#105331] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <span>👤</span>
-                <span>Citizen Demo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFillDemoCreds('worker')}
-                className="py-2 px-2.5 text-xs font-semibold bg-[#0F626A] hover:bg-[#0B4B52] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <span>🧹</span>
-                <span>Collector Demo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFillDemoCreds('admin')}
-                className="py-2 px-2.5 text-xs font-semibold bg-[#B86B11] hover:bg-[#97550B] text-[#F4F6F2] rounded-sm whitespace-nowrap transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                title="Fill Admin Credentials (deepaksachan450@gmail.com) into Sign In form"
-              >
-                <span>🔑</span>
-                <span>Admin Demo</span>
-              </button>
-            </div>
-          </div>
+      <div className="max-w-xl mx-auto border border-[#C5D0C8] dark:border-[#24382E] bg-[#F4F6F2] dark:bg-[#14221C] rounded-sm overflow-hidden shadow-xs p-6 sm:p-8">
+        <div className="flex justify-center pb-5 mb-5 border-b border-[#C5D0C8] dark:border-[#24382E]">
+          <ClenCLogo variant="full" />
         </div>
 
-        {/* RIGHT SPLIT PANEL: Interactive Firebase Sign Up / Sign In Form */}
-        <div className="lg:col-span-7 p-6 sm:p-8 bg-[#F4F6F2] dark:bg-[#14221C]">
-          {/* Mode Tabs */}
-          <div className="flex items-center justify-between border-b border-[#C5D0C8] dark:border-[#24382E] pb-4 mb-6">
+        {/* Mode Tabs */}
+        <div className="flex items-center justify-between border-b border-[#C5D0C8] dark:border-[#24382E] pb-4 mb-6">
             <div className="flex items-center gap-2 bg-[#E5ECE3] dark:bg-[#0E1814] p-1 rounded-sm border border-[#C5D0C8] dark:border-[#24382E]">
               <button
                 type="button"
@@ -639,9 +485,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedRole(r.id as Role);
-                      if (r.id === 'admin') {
-                        handleFillDemoCreds('admin');
-                      }
                     }}
                     className={`py-2.5 px-3 text-xs font-semibold border rounded-sm text-left flex items-center justify-between transition-colors ${
                       selectedRole === r.id
@@ -856,7 +699,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </button>
             </div>
           </form>
-        </div>
       </div>
     </div>
   );

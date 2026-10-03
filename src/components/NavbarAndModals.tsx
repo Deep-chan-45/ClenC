@@ -143,24 +143,29 @@ export const TopNavbar: React.FC<TopNavProps> = ({
                   type="button"
                   onClick={onSignOut}
                   className="h-10 px-3 text-xs font-mono font-semibold border border-[#E0BCB9] dark:border-[#522926] bg-[#FDF5F5] dark:bg-[#2B1716] hover:bg-[#F8E0DE] dark:hover:bg-[#401E1C] text-[#A82820] dark:text-[#F38A82] rounded-sm transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-xs"
-                  title="Sign out of account and return to guest view"
+                  title="Sign out of account"
                 >
                   <span>{language === 'en' ? 'Sign Out' : 'लॉगआउट'}</span>
                 </button>
               )}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => onNavigate('auth')}
-              className={`h-10 px-4 text-xs font-semibold rounded-sm whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#15693F] ${
-                currentPage === 'auth'
-                  ? 'bg-[#0F626A] text-[#F4F6F2]'
-                  : 'bg-[#15693F] hover:bg-[#105331] text-[#F4F6F2]'
-              }`}
-            >
-              {language === 'en' ? 'Sign In / Roles' : 'लॉगिन / भूमिका'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onNavigate('auth')}
+                className="h-10 px-3.5 text-xs font-semibold rounded-sm bg-[#15693F] hover:bg-[#105331] text-white whitespace-nowrap shrink-0 cursor-pointer shadow-xs transition-colors"
+              >
+                {language === 'en' ? 'Register' : 'पंजीकरण'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('auth')}
+                className="h-10 px-3 text-xs font-semibold rounded-sm border border-[#15693F] text-[#15693F] dark:text-[#6EE7A2] bg-white dark:bg-[#11241A] hover:bg-[#EAEFE7] dark:hover:bg-[#163324] whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+              >
+                {language === 'en' ? 'Sign In' : 'लॉगिन'}
+              </button>
+            </div>
           )}
         </div>
       </div>

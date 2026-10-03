@@ -18,6 +18,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   onSnapshot,
   getDocs,
@@ -25,30 +26,39 @@ import {
   Firestore,
 } from 'firebase/firestore';
 import { Complaint, PickupRequest, Role, UserProfile, UserType } from './types';
+import firebaseAppletConfig from '../firebase-applet-config.json';
 
-// The user's Firebase web app configuration
+// The user's Firebase web app configuration loaded from applet config
+export const FIRESTORE_DATABASE_ID =
+  firebaseAppletConfig.firestoreDatabaseId ||
+  'ai-studio-clenc-35714478-fada-4554-9f83-43a2086a2b07';
+
 export const firebaseConfig = {
-  apiKey: "AIzaSyAIVPwtbrWCScDEc572V-MpTAJ5hBOH_Bo",
-  authDomain: "clenc-e382f.firebaseapp.com",
-  projectId: "clenc-e382f",
-  storageBucket: "clenc-e382f.firebasestorage.app",
-  messagingSenderId: "46453822659",
-  appId: "1:46453822659:web:83c1ee247d0d573913be76",
-  measurementId: "G-396Z86FYXC"
+  apiKey: firebaseAppletConfig.apiKey || "AIzaSyAIVPwtbrWCScDEc572V-MpTAJ5hBOH_Bo",
+  authDomain: firebaseAppletConfig.authDomain || "clenc-e382f.firebaseapp.com",
+  projectId: firebaseAppletConfig.projectId || "clenc-e382f",
+  storageBucket: firebaseAppletConfig.storageBucket || "clenc-e382f.firebasestorage.app",
+  messagingSenderId: firebaseAppletConfig.messagingSenderId || "46453822659",
+  appId: firebaseAppletConfig.appId || "1:46453822659:web:c1524a26d75db0d413be76",
+  measurementId: firebaseAppletConfig.measurementId || ""
 };
 
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 
-// Initialize Firestore with auto long-polling to prevent WebSocket offline drops in iframes
+// Initialize Firestore with specific database ID and auto long-polling to prevent WebSocket offline drops in iframes
 let firestoreDb: Firestore;
 try {
   firestoreDb = initializeFirestore(app, {
     experimentalAutoDetectLongPolling: true,
-  });
+  }, FIRESTORE_DATABASE_ID);
 } catch (_) {
-  firestoreDb = getFirestore(app);
+  try {
+    firestoreDb = getFirestore(app, FIRESTORE_DATABASE_ID);
+  } catch (_2) {
+    firestoreDb = getFirestore(app);
+  }
 }
 export const db = firestoreDb;
 
@@ -261,6 +271,7 @@ export async function registerWithFirebase(
     ? 'admin'
     : (profile.role === 'admin' ? 'citizen' : (profile.role || 'citizen'));
 
+  const nowIso = new Date().toISOString();
   const newUserData: StoredUserData = isMunicipalAdmin
     ? getMunicipalAdminProfile(uid)
     : {
@@ -277,15 +288,17 @@ export async function registerWithFirebase(
         points: assignedRole === 'citizen' ? 100 : 0,
         streakDays: 1,
         badges: assignedRole === 'citizen' ? ['Pioneer Segregator', 'Kanpur Swachh Citizen'] : ['Verified Municipal Staff'],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
 
-  // Background non-blocking persistence - never hangs user sign up
+  // Explicitly persist new registration in Firestore 'users' collection
   if (uid && uid !== 'admin_deepaksachan450') {
-    setDoc(doc(db, 'users', uid), newUserData, { merge: true }).catch((err) => {
-      console.warn('Note background saving user in Firestore:', err);
-    });
+    try {
+      await setDoc(doc(db, 'users', uid), newUserData, { merge: true });
+    } catch (saveErr) {
+      console.warn('Note saving registered user in Firestore:', saveErr);
+    }
   }
 
   return newUserData;
@@ -374,6 +387,7 @@ export async function loginWithFirebase(
       if (isCollectorWorker && data.role !== 'worker') {
         data.role = 'worker';
       }
+      setDoc(userDocRef, { lastSignInAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
       return data;
     }
   } catch (_) {
@@ -382,6 +396,7 @@ export async function loginWithFirebase(
 
   // Profile data fallback
   const fallbackRole: Role = isCollectorWorker ? 'worker' : 'citizen';
+  const nowIso = new Date().toISOString();
   const fallbackUser: StoredUserData = {
     uid,
     email: cleanEmail,
@@ -396,12 +411,12 @@ export async function loginWithFirebase(
     points: isCollectorWorker ? 480 : 120,
     streakDays: 1,
     badges: isCollectorWorker ? ['Verified Beat Collector', 'Safai Mitra Star'] : ['Pioneer Segregator'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: nowIso,
+    updatedAt: nowIso,
   };
 
   // Persist in background non-blocking
-  setDoc(userDocRef, fallbackUser, { merge: true }).catch(() => {});
+  setDoc(userDocRef, { ...fallbackUser, lastSignInAt: nowIso }, { merge: true }).catch(() => {});
 
   return fallbackUser;
 }
@@ -516,6 +531,29 @@ export async function createOrUpdateGoogleFallbackUser(
 }
 
 /**
+ * Deep sanitization for Firestore documents to strip any undefined values,
+ * which Firestore strictly forbids and throws an exception on.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const res: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        res[key] = sanitizeForFirestore(value);
+      }
+    }
+    return res as T;
+  }
+  return data;
+}
+
+/**
  * Log out from Firebase
  */
 export async function logoutFromFirebase(): Promise<void> {
@@ -532,7 +570,8 @@ export async function saveUserProfileToFirestore(
   const userDocRef = doc(db, 'users', uid);
   const path = `users/${uid}`;
   try {
-    await setDoc(userDocRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+    const clean = sanitizeForFirestore({ ...updates, updatedAt: new Date().toISOString() });
+    await setDoc(userDocRef, clean, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -545,16 +584,17 @@ export async function saveUserProfileToFirestore(
 export async function savePickupToFirestore(pickup: PickupRequest, userId?: string): Promise<void> {
   const pickupDocRef = doc(db, 'pickups', pickup.id);
   const path = `pickups/${pickup.id}`;
-  const data = {
+  const data = sanitizeForFirestore({
     ...pickup,
-    userId: userId || auth.currentUser?.uid || 'guest-citizen',
+    userId: userId || auth.currentUser?.uid || 'registered_user',
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   try {
-    await setDoc(pickupDocRef, data);
+    await setDoc(pickupDocRef, data, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
   }
 }
 
@@ -566,37 +606,15 @@ export async function updatePickupStatusInFirestore(
   const pickupDocRef = doc(db, 'pickups', id);
   const path = `pickups/${id}`;
   try {
-    await updateDoc(pickupDocRef, {
+    const clean = sanitizeForFirestore({
       status,
       ...additional,
       updatedAt: new Date().toISOString(),
     });
+    await setDoc(pickupDocRef, clean, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
-}
-
-export function subscribeToPickups(
-  onData: (pickups: PickupRequest[]) => void,
-  onError?: (err: Error) => void
-) {
-  const pickupsCol = collection(db, 'pickups');
-  return onSnapshot(
-    pickupsCol,
-    (snapshot) => {
-      const list: PickupRequest[] = [];
-      snapshot.forEach((d) => {
-        list.push(d.data() as PickupRequest);
-      });
-      // Sort newest first
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      onData(list);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'pickups');
-      if (onError) onError(error);
-    }
-  );
 }
 
 // -------------------------------------------------------------
@@ -609,14 +627,14 @@ export async function saveComplaintToFirestore(
 ): Promise<void> {
   const complaintDocRef = doc(db, 'complaints', complaint.id);
   const path = `complaints/${complaint.id}`;
-  const data = {
+  const data = sanitizeForFirestore({
     ...complaint,
-    userId: userId || auth.currentUser?.uid || 'guest-citizen',
+    userId: userId || auth.currentUser?.uid || 'registered_user',
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   try {
-    await setDoc(complaintDocRef, data);
+    await setDoc(complaintDocRef, data, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
     throw error;
@@ -630,12 +648,44 @@ export async function updateComplaintInFirestore(
   const complaintDocRef = doc(db, 'complaints', id);
   const path = `complaints/${id}`;
   try {
-    await updateDoc(complaintDocRef, {
+    const clean = sanitizeForFirestore({
       ...updates,
       updatedAt: new Date().toISOString(),
     });
+    await setDoc(complaintDocRef, clean, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export const DUMMY_COMPLAINT_IDS = [
+  'CMP-2026-8412',
+  'CMP-2026-8395',
+  'CMP-2026-8360',
+  'CMP-2026-8408',
+  'CMP-2026-8319',
+];
+
+export const DUMMY_PICKUP_IDS = [
+  'PKP-2026-3091',
+  'PKP-2026-3044',
+  'PKP-2026-2988',
+];
+
+export async function purgeDummySeedDataFromFirestore(): Promise<void> {
+  try {
+    for (const id of DUMMY_COMPLAINT_IDS) {
+      try {
+        await deleteDoc(doc(db, 'complaints', id));
+      } catch (_) {}
+    }
+    for (const id of DUMMY_PICKUP_IDS) {
+      try {
+        await deleteDoc(doc(db, 'pickups', id));
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('Note during dummy data purge:', err);
   }
 }
 
@@ -649,7 +699,10 @@ export function subscribeToComplaints(
     (snapshot) => {
       const list: Complaint[] = [];
       snapshot.forEach((d) => {
-        list.push(d.data() as Complaint);
+        const item = d.data() as Complaint;
+        if (!DUMMY_COMPLAINT_IDS.includes(item.id)) {
+          list.push(item);
+        }
       });
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onData(list);
@@ -661,31 +714,38 @@ export function subscribeToComplaints(
   );
 }
 
-/**
- * Seed initial Kanpur datasets if collections are empty, ensuring a vibrant experience
- */
-export async function seedInitialKanpurDataIfEmpty(
-  initialComplaints: Complaint[],
-  initialPickups: PickupRequest[]
-): Promise<void> {
-  try {
-    const complaintsCol = collection(db, 'complaints');
-    const cSnap = await getDocs(complaintsCol);
-    if (cSnap.empty) {
-      console.log('Seeding initial Kanpur complaints into Firestore...');
-      for (const c of initialComplaints) {
-        await setDoc(doc(db, 'complaints', c.id), c);
-      }
+export function subscribeToPickups(
+  onData: (pickups: PickupRequest[]) => void,
+  onError?: (err: Error) => void
+) {
+  const pickupsCol = collection(db, 'pickups');
+  return onSnapshot(
+    pickupsCol,
+    (snapshot) => {
+      const list: PickupRequest[] = [];
+      snapshot.forEach((d) => {
+        const item = d.data() as PickupRequest;
+        if (!DUMMY_PICKUP_IDS.includes(item.id)) {
+          list.push(item);
+        }
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onData(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'pickups');
+      if (onError) onError(error);
     }
+  );
+}
 
-    const pickupsCol = collection(db, 'pickups');
-    const pSnap = await getDocs(pickupsCol);
-    if (pSnap.empty) {
-      console.log('Seeding initial Kanpur pickup bookings into Firestore...');
-      for (const p of initialPickups) {
-        await setDoc(doc(db, 'pickups', p.id), p);
-      }
-    }
+/**
+ * Ensures system admin account is present without polluting with dummy requests
+ */
+export async function seedInitialKanpurDataIfEmpty(): Promise<void> {
+  try {
+    // Purge any lingering dummy seed records to keep datasets authentic
+    await purgeDummySeedDataFromFirestore();
 
     // Seed Municipal Admin record for deepaksachan450@gmail.com
     try {
